@@ -1,0 +1,456 @@
+/* Dashboard Main Wrapper */
+.dashboard-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Stacking logic: Removing the 1fr 1fr grid */
+.dashboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.card-header-simple {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 25px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 15px;
+}
+
+.icon-bg {
+  background: #f1f5f9;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 1.2rem;
+}
+
+/* Department List Styling */
+.split-list-container {
+  display: flex;
+  gap: 30px;
+}
+
+.dept-column {
+  list-style: none;
+  padding: 0;
+  flex: 1; /* Ensures both columns share the card width equally */
+}
+
+.dept-column li {
+  padding: 15px;
+  background: #f8fafc;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #edf2f7;
+}
+
+.dot-green {
+  width: 10px;
+  height: 10px;
+  background: #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+}
+
+/* Heatmap Grid Styling (Full Width wrapping) */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 15px;
+}
+
+.heatmap-box-occupied {
+  /* background: #fff1f2; */
+  /* border: 1px solid #fecdd3; */
+  border: 1px solid #cfb5b5c7;
+  padding: 18px;
+  border-radius: 14px;
+  transition: all 0.3s ease;
+}
+
+.heatmap-box-occupied:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.room-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.room-top strong {
+  font-size: 1.2rem;
+  /* color: #9f1239; */
+}
+
+.room-dept {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  /* color: #be123c; */
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+.room-info {
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(159, 18, 57, 0.1);
+}
+
+.subject-text {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #1e293b;
+}
+
+.teacher-text {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Red Pulsing Animation */
+.blink-dot-mini {
+  width: 8px;
+  height: 8px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  animation: pulse-red 1.5s infinite;
+}
+
+@keyframes pulse-red {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+:root {
+  --sidebar-bg: #1e293b;
+  --primary-color: #4f46e5;
+  --bg-light: #f4f6f9;
+  --text-dark: #1e293b;
+  --text-muted: #64748b;
+  --white: #ffffff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  background-color: var(--bg-light);
+}
+
+/* Sidebar Styling */
+.sidebar {
+  width: 240px;
+  background-color: var(--sidebar-bg);
+  color: var(--white);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.sidebar h2 {
+  margin-bottom: 30px;
+  font-size: 1.5rem;
+  color: #818cf8;
+}
+
+.nav-item {
+  padding: 12px 15px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.3s;
+  color: #cbd5e1;
+}
+
+.nav-item:hover {
+  background-color: #334155;
+}
+
+.nav-item.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+/* Main Content Styling */
+.main-content {
+  background-image: url("https://www.transparenttextures.com/patterns/ag-square.png");
+  flex: 1;
+  padding: 40px;
+  overflow-y: auto;
+}
+
+.card {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+}
+/* Specific styles for forms and lists */
+.card-header {
+  margin-bottom: 25px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 15px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-dark);
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.data-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 10px;
+  margin-top: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.item-info h4 {
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+}
+
+.item-info p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #4338ca;
+}
+
+.btn-ghost {
+  /* background: none; */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 230, 230, 1) 40%,
+    rgba(255, 200, 200, 1) 100%
+  );
+  border: none;
+  border-radius: 10px;
+  padding: 8px;
+  font-weight: 500;
+}
+/* Styling the Select dropdown */
+.custom-select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: white;
+  font-size: 1rem;
+}
+
+/* Styling the 'Lecture' or 'Lab' labels */
+.tag {
+  font-size: 0.7rem;
+  background: #eef2ff;
+  color: var(--primary-color);
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: bold;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+/* Live Blinking Indicator */
+.blink-dot {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 12px;
+  height: 12px;
+  background-color: #ef4444; /* Red color */
+  border-radius: 50%;
+  box-shadow: 0 0 0 rgba(239, 68, 68, 0.4);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.room-card {
+  transition: transform 0.2s ease;
+}
+
+.room-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+/* Make the dropdown (select) look exactly like the text inputs */
+select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background-color: white;
+  font-size: 1rem;
+  appearance: none; /* Removes the default browser arrow */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1em;
+  cursor: pointer;
+}
+
+/* Container to align checkbox and label horizontally */
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%; /* Align with the input next to it */
+  padding-top: 25px; /* Matches the space the label takes on the left input */
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #4f46e5; /* Matches your purple button */
+}
+
+.checkbox-group label {
+  margin: 0 !important; /* Overrides any default label margins */
+  font-weight: 600;
+  cursor: pointer;
+  color: #1e293b;
+}
+
+/* -----------------Skeleton background---------------------- */
+
+/* Skeleton Animation */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.skeleton-box {
+  height: 80px;
+  width: 100%;
+  margin-bottom: 15px;
+  border-radius: 12px;
+  background: #f6f7f8;
+  background-image: linear-gradient(
+    90deg,
+    #f6f7f8 0%,
+    #edeef1 20%,
+    #f6f7f8 40%,
+    #f6f7f8 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* Toast Customization (Optional) */
+.hot-toast-custom {
+  border-radius: 10px !important;
+  background: #1e293b !important;
+  color: #fff !important;
+  font-family: inherit !important;
+}
+
+.login-container {
+  background-image: url("https://www.transparenttextures.com/patterns/arches.png");
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f1f5f9; /* Light grey background */
+}
+
+.login-card {
+  background: white;
+  padding: 40px;
+  border-radius: 15px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+/* Ensure form groups in login don't have too much margin */
+.login-card .form-group {
+  margin-bottom: 10px;
+}
