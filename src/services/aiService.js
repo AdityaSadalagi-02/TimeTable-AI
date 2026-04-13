@@ -1,7 +1,7 @@
 import { supabase } from "../supabaseClient";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI("AIzaSyC8wavSBXW4dcx6NruQSDO-1LLymrqwxhU");
+const genAI = new GoogleGenerativeAI("AIzaSyB2d6sybRJ_xe4LH7YD4-eb4Qdsim5-iyM");
 
 const model = genAI.getGenerativeModel({
   model: "gemini-3.1-flash-lite-preview",
