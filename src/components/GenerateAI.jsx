@@ -20,6 +20,7 @@ const DAYS = [
   "Saturday",
 ];
 
+// ─── colour palette ──────────────────────────────────────────────────────────
 const PALETTE = [
   "#dbeafe",
   "#dcfce7",
@@ -41,6 +42,7 @@ const subjectColor = (name) => {
   return colorCache[name];
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
 const GenerateAI = () => {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
@@ -56,6 +58,19 @@ const GenerateAI = () => {
   const [modLoading, setModLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // ── HELPERS ─────────────────────────────────────────────────────────────
+
+  /**
+   * Build the display matrix from a flat timetable + slots list.
+   *
+   * Each row = one day.
+   * Each cell = one of:
+   *   { type: "break"|"lunch", label }
+   *   { type: "class",  label, subject, labSpan, labSkip }
+   *
+   * labSpan > 1  → render this cell with colSpan=labSpan (first slot of a lab block)
+   * labSkip=true → skip rendering this cell (already covered by the colSpan above)
+   */
   const rebuildMatrix = (timetable, slots, subjects) => {
     const labs = (subjects || []).filter((s) => s.is_lab);
     const combinedLabLabel = labs.length > 0 ? getLabLabel(labs) : null;
@@ -74,6 +89,7 @@ const GenerateAI = () => {
         const isLab = combinedLabLabel && subject === combinedLabLabel;
 
         if (isLab) {
+          // Count how many consecutive slots share this lab label
           let span = 1;
           for (let j = i + 1; j < slots.length; j++) {
             if (slots[j].type !== "class") break;
@@ -82,12 +98,14 @@ const GenerateAI = () => {
             span++;
           }
 
+          // Push first slot with full span info
           row.push({
             type: "class",
             label: slot.label,
             subject,
             labSpan: span,
           });
+          // Push skip markers for the remaining slots in the block
           for (let k = 1; k < span; k++) {
             i++; // advance outer loop too
             row.push({
@@ -109,6 +127,7 @@ const GenerateAI = () => {
     setMatrix(newMatrix);
   };
 
+  // ── DRAG & DROP ──────────────────────────────────────────────────────────
   const handleDragStart = (day, slotLabel) =>
     setDraggedCell({ day, slotLabel });
 
@@ -151,6 +170,7 @@ const GenerateAI = () => {
     }
   };
 
+  // ── GENERATE ─────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     setLoading(true);
     setMatrix(null);
@@ -194,6 +214,7 @@ const GenerateAI = () => {
     }
   };
 
+  // ── NATURAL-LANGUAGE CHANGES ─────────────────────────────────────────────
   const handleApplyChanges = async () => {
     if (!modInput.trim()) return toast.error("Describe the change you want.");
     setModLoading(true);
@@ -249,41 +270,127 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
     }
   };
 
+  // ── SAVE ─────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!generationData) return;
     setSaving(true);
     const tid = toast.loading("Saving timetable…");
 
     try {
-      const { timetable } = generationData;
-      const rows = [];
+      const { timetable, data } = generationData;
+
+      // ── 1. Save full timetable snapshot to saved_timetables ──────────────
+      const { data: saved, error: saveErr } = await supabase
+        .from("saved_timetables")
+        .insert([
+          {
+            department: selectedDept,
+            semester: parseInt(selectedSem),
+            timetable_json: timetable,
+            created_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (saveErr) throw new Error("Save failed: " + saveErr.message);
+
+      // ── 2. Update teacher_availability — mark each assigned slot as busy ─
+      const subjectTeacherMap = {};
+      (data.resources.teacherLinks || []).forEach((link) => {
+        const name = link.subjects?.subject_name;
+        if (name) subjectTeacherMap[name] = link.teacher_id;
+      });
+
+      const availabilityRows = [];
       for (const day in timetable) {
         for (const slot in timetable[day]) {
           const subject = timetable[day][slot];
           if (!subject || subject === "-") continue;
-          rows.push({
-            department: selectedDept,
-            semester: parseInt(selectedSem),
+          const teacherId = subjectTeacherMap[subject];
+          if (!teacherId) continue;
+          availabilityRows.push({
+            teacher_id: teacherId,
             day_of_week: day,
             time_slot: slot,
-            subject_name: subject,
+            is_busy: true,
           });
         }
       }
 
-      const { error } = await supabase.from("timetable_entries").upsert(rows, {
-        onConflict: "department,semester,day_of_week,time_slot",
-      });
+      if (availabilityRows.length > 0) {
+        const { error: availErr } = await supabase
+          .from("teacher_availability")
+          .upsert(availabilityRows, {
+            onConflict: "teacher_id,day_of_week,time_slot",
+          });
+        if (availErr)
+          console.warn("teacher_availability update warn:", availErr.message);
+      }
 
-      if (error) throw new Error(error.message);
-      toast.success(`Saved ${rows.length} entries!`, { id: tid });
+      // ── 3. Update room bookings — assign rooms by subject type ────────────
+      const rooms = data.resources.rooms || [];
+      const theoryRooms = rooms.filter((r) => r.room_type === "Theory");
+      const labRooms = rooms.filter((r) => r.room_type === "Lab");
+      const labSubjects = data.subjects.filter((s) => s.is_lab);
+      const combinedLabLabel =
+        labSubjects.length > 0
+          ? labSubjects.map((l) => l.subject_name).join("/")
+          : null;
+
+      const roomBookingRows = [];
+      let theoryRoomIdx = 0;
+      let labRoomIdx = 0;
+
+      for (const day in timetable) {
+        for (const slot in timetable[day]) {
+          const subject = timetable[day][slot];
+          if (!subject || subject === "-") continue;
+
+          const isLabSlot = combinedLabLabel && subject === combinedLabLabel;
+          let assignedRoom = null;
+
+          if (isLabSlot && labRooms.length > 0) {
+            assignedRoom = labRooms[labRoomIdx % labRooms.length];
+            labRoomIdx++;
+          } else if (!isLabSlot && theoryRooms.length > 0) {
+            assignedRoom = theoryRooms[theoryRoomIdx % theoryRooms.length];
+            theoryRoomIdx++;
+          }
+
+          if (assignedRoom) {
+            roomBookingRows.push({
+              room_id: assignedRoom.id,
+              day_of_week: day,
+              time_slot: slot,
+              subject_name: subject,
+              department: selectedDept,
+              semester: parseInt(selectedSem),
+              timetable_id: saved.id,
+            });
+          }
+        }
+      }
+
+      if (roomBookingRows.length > 0) {
+        const { error: roomErr } = await supabase
+          .from("room_bookings")
+          .upsert(roomBookingRows, {
+            onConflict: "room_id,day_of_week,time_slot",
+          });
+        if (roomErr)
+          console.warn("room_bookings update warn:", roomErr.message);
+      }
+
+      toast.success(`Timetable saved.`, { id: tid, duration: 4000 });
     } catch (err) {
-      toast.error("Save failed: " + err.message, { id: tid });
+      toast.error(err.message || "Save failed", { id: tid });
     } finally {
       setSaving(false);
     }
   };
 
+  // ── RENDER ───────────────────────────────────────────────────────────────
   return (
     <div style={{ maxWidth: "1400px", margin: "30px auto", padding: "0 16px" }}>
       {/* CONTROL PANEL */}
@@ -413,8 +520,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                 <tr>
                   <th style={styles.th}>Day</th>
                   {matrix["Monday"].map((slot, idx) => {
-                    // Skip cells marked as labSkip (they're covered by the colspan above)
-                    if (slot.labSkip) return null;
+                    // labSkip slots: render their own <th> normally (no merging in header)
                     if (slot.type !== "class") {
                       return (
                         <th
@@ -425,18 +531,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                         </th>
                       );
                     }
-                    if (slot.labSpan > 1) {
-                      // Show combined time range in header
-                      return (
-                        <th
-                          key={idx}
-                          colSpan={slot.labSpan}
-                          style={{ ...styles.th, background: "#e0e7ff" }}
-                        >
-                          LAB BLOCK
-                        </th>
-                      );
-                    }
+                    // Every class slot — lab or theory — gets its own header with its time label
                     return (
                       <th key={idx} style={styles.th}>
                         {slot.label}
@@ -495,7 +590,6 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                                 ⚠️
                               </span>
                             )}
-                            <span style={styles.labBadge}>🔬 LAB</span>
                             <div
                               style={{
                                 fontWeight: 700,
@@ -504,15 +598,6 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                               }}
                             >
                               {cell.subject}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "0.72rem",
-                                color: "#64748b",
-                                marginTop: 2,
-                              }}
-                            >
-                              {cell.labSpan} consecutive slots
                             </div>
                           </td>
                         );
@@ -614,6 +699,9 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────────────────────────
 const styles = {
   card: {
     background: "#fff",

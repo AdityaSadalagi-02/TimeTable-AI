@@ -6,12 +6,12 @@ import Button from "@mui/material/Button";
 const SubjectManager = () => {
   const [subjects, setSubjects] = useState([]);
   const [subjectName, setSubjectName] = useState("");
+  const [subjectCode, setSubjectCode] = useState("");
   const [weeklyHours, setWeeklyHours] = useState("");
   const [isLab, setIsLab] = useState(false);
   const [semester, setSemester] = useState("1");
   const [department, setDepartment] = useState("ISE");
   const [loading, setLoading] = useState(true);
-
   const [expandedDept, setExpandedDept] = useState(null);
   const [expandedSem, setExpandedSem] = useState(null);
 
@@ -28,37 +28,37 @@ const SubjectManager = () => {
       .from("subjects")
       .select("*")
       .order("subject_name", { ascending: true });
-
     if (error) console.error("Error fetching subjects:", error);
     else setSubjects(data || []);
-    // Slight delay just to appreciate the smooth skeleton effect
-    setTimeout(() => setLoading(false), 800);
+    setTimeout(() => setLoading(false), 500);
   };
 
   const handleAddSubject = async (e) => {
     e.preventDefault();
-    if (!subjectName || !weeklyHours)
-      return toast.error("Fill in all the details");
+    if (!subjectName || !subjectCode || !weeklyHours)
+      return toast.error("Please fill in Subject Name, Code and Credits.");
 
     const tid = toast.loading("Saving subject...");
     const { error } = await supabase.from("subjects").insert([
       {
         subject_name: subjectName,
+        subject_code: subjectCode.toUpperCase().trim(),
         weekly_hours: parseFloat(weeklyHours),
         is_lab: isLab,
         semester: parseInt(semester),
-        department: department,
+        department,
       },
     ]);
 
     if (error) {
-      toast.error("Failed to save", { id: tid });
+      toast.error(error.message || "Failed to save", { id: tid });
     } else {
       setSubjectName("");
+      setSubjectCode("");
       setWeeklyHours("");
       setIsLab(false);
       fetchSubjects();
-      toast.success("Subject added", { id: tid });
+      toast.success("Subject added!", { id: tid });
     }
   };
 
@@ -67,7 +67,7 @@ const SubjectManager = () => {
     if (error) toast.error("Could not delete subject");
     else {
       fetchSubjects();
-      toast.success("Removed subject");
+      toast.success("Subject removed");
     }
   };
 
@@ -76,6 +76,15 @@ const SubjectManager = () => {
   const toggleSem = (dept, sem) => {
     const key = `${dept}-${sem}`;
     setExpandedSem(expandedSem === key ? null : key);
+  };
+
+  const inp = {
+    width: "100%",
+    padding: "10px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    marginTop: "5px",
+    fontSize: "0.95rem",
   };
 
   return (
@@ -90,9 +99,8 @@ const SubjectManager = () => {
         </p>
       </div>
 
-      {/* --- FORM SECTION --- */}
+      {/* ── FORM ── */}
       <div
-        className="form-section"
         style={{
           marginBottom: "40px",
           padding: "25px",
@@ -101,6 +109,7 @@ const SubjectManager = () => {
           border: "1px solid #e2e8f0",
         }}
       >
+        {/* Row 1 — Name + Code */}
         <div
           style={{
             display: "grid",
@@ -117,15 +126,32 @@ const SubjectManager = () => {
               value={subjectName}
               onChange={(e) => setSubjectName(e.target.value)}
               placeholder="e.g. Operating Systems"
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "1px solid #cbd5e1",
-                marginTop: "5px",
-              }}
+              style={inp}
             />
           </div>
+          <div className="form-group">
+            <label style={{ color: "#475569", fontWeight: "600" }}>
+              Subject Code <span style={{ color: "#ef4444" }}>*</span>
+            </label>
+            <input
+              type="text"
+              value={subjectCode}
+              onChange={(e) => setSubjectCode(e.target.value)}
+              placeholder="e.g. CS601"
+              style={inp}
+            />
+          </div>
+        </div>
+
+        {/* Row 2 — Dept + Sem + Credits */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: "20px",
+            marginTop: "20px",
+          }}
+        >
           <div className="form-group">
             <label style={{ color: "#475569", fontWeight: "600" }}>
               Department
@@ -133,13 +159,7 @@ const SubjectManager = () => {
             <select
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "1px solid #cbd5e1",
-                marginTop: "5px",
-              }}
+              style={inp}
             >
               {deptOptions.map((d) => (
                 <option key={d} value={d}>
@@ -148,16 +168,6 @@ const SubjectManager = () => {
               ))}
             </select>
           </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-            marginTop: "20px",
-          }}
-        >
           <div className="form-group">
             <label style={{ color: "#475569", fontWeight: "600" }}>
               Semester
@@ -165,44 +175,30 @@ const SubjectManager = () => {
             <select
               value={semester}
               onChange={(e) => setSemester(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "1px solid #cbd5e1",
-                marginTop: "5px",
-              }}
+              style={inp}
             >
-              <option value="1">1st Sem</option>
-              <option value="2">2nd Sem</option>
-              <option value="3">3rd Sem</option>
-              <option value="4">4th Sem</option>
-              <option value="5">5th Sem</option>
-              <option value="6">6th Sem</option>
-              <option value="7">7th Sem</option>
-              <option value="8">8th Sem</option>
+              {semOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s} Semester
+                </option>
+              ))}
             </select>
           </div>
           <div className="form-group">
             <label style={{ color: "#475569", fontWeight: "600" }}>
-              Credits
+              Weekly Hours
             </label>
             <input
               type="number"
               value={weeklyHours}
               onChange={(e) => setWeeklyHours(e.target.value)}
               placeholder="e.g. 4"
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "1px solid #cbd5e1",
-                marginTop: "5px",
-              }}
+              style={inp}
             />
           </div>
         </div>
 
+        {/* Lab checkbox */}
         <div
           style={{
             marginTop: "20px",
@@ -216,10 +212,16 @@ const SubjectManager = () => {
             id="labCheck"
             checked={isLab}
             onChange={(e) => setIsLab(e.target.checked)}
+            style={{
+              width: 18,
+              height: 18,
+              cursor: "pointer",
+              accentColor: "#4f46e5",
+            }}
           />
           <label
             htmlFor="labCheck"
-            style={{ color: "#475569", cursor: "pointer" }}
+            style={{ color: "#475569", cursor: "pointer", fontWeight: 600 }}
           >
             Practical / Lab Subject
           </label>
@@ -240,217 +242,221 @@ const SubjectManager = () => {
         </Button>
       </div>
 
-      {/* --- NESTED CATALOG --- */}
+      {/* ── CATALOG ── */}
       <div className="list">
         <h3 style={{ color: "#0f172a", marginBottom: "20px" }}>
           Academic Catalog
         </h3>
 
-        {loading ? (
-          <div className="skeleton-container">
-            {/* Generating 5 pulsing skeleton bars to represent departments */}
-            {[1, 2, 3, 4, 5].map((i) => (
+        {loading
+          ? [1, 2, 3, 4, 5].map((i) => (
               <div
                 key={i}
                 style={{
-                  height: "56px",
+                  height: 56,
                   backgroundColor: "#f1f5f9",
-                  borderRadius: "8px",
-                  marginBottom: "12px",
-                  animation: "pulse 1.5s infinite ease-in-out",
+                  borderRadius: 8,
+                  marginBottom: 12,
                 }}
+                className="skeleton-box"
               />
-            ))}
-          </div>
-        ) : (
-          deptOptions.map((dept) => {
-            const isDeptOpen = expandedDept === dept;
-            const deptSubjects = subjects.filter((s) => s.department === dept);
-
-            return (
-              <div
-                key={dept}
-                style={{
-                  marginBottom: "12px",
-                  borderRadius: "8px",
-                  border: "1px solid #e2e8f0",
-                  overflow: "hidden",
-                }}
-              >
+            ))
+          : deptOptions.map((dept) => {
+              const isDeptOpen = expandedDept === dept;
+              const deptSubjects = subjects.filter(
+                (s) => s.department === dept
+              );
+              return (
                 <div
-                  onClick={() => toggleDept(dept)}
+                  key={dept}
                   style={{
-                    padding: "16px 20px",
-                    background: isDeptOpen ? "#f1f5f9" : "#fff",
-                    cursor: "pointer",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    borderLeft: `5px solid ${
-                      isDeptOpen ? "#3b82f6" : "#cbd5e1"
-                    }`,
+                    marginBottom: 12,
+                    borderRadius: 8,
+                    border: "1px solid #e2e8f0",
+                    overflow: "hidden",
                   }}
                 >
-                  <h4
-                    style={{ margin: 0, color: "#1e293b", fontWeight: "700" }}
+                  <div
+                    onClick={() => toggleDept(dept)}
+                    style={{
+                      padding: "16px 20px",
+                      background: isDeptOpen ? "#f1f5f9" : "#fff",
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      borderLeft: `5px solid ${
+                        isDeptOpen ? "#3b82f6" : "#cbd5e1"
+                      }`,
+                    }}
                   >
-                    {dept} DEPARTMENT
-                  </h4>
-                  <span style={{ color: "#94a3b8" }}>
-                    {isDeptOpen ? "▲" : "▼"}
-                  </span>
-                </div>
+                    <h4
+                      style={{ margin: 0, color: "#1e293b", fontWeight: 700 }}
+                    >
+                      {dept} DEPARTMENT
+                    </h4>
+                    <span style={{ color: "#94a3b8" }}>
+                      {isDeptOpen ? "▲" : "▼"}
+                    </span>
+                  </div>
 
-                {isDeptOpen && (
-                  <div style={{ padding: "12px", background: "#f8fafc" }}>
-                    {semOptions.map((sem) => {
-                      const semKey = `${dept}-${sem}`;
-                      const isSemOpen = expandedSem === semKey;
-                      const finalSubjects = deptSubjects.filter(
-                        (s) => s.semester === sem
-                      );
-
-                      return (
-                        <div
-                          key={sem}
-                          style={{
-                            marginBottom: "8px",
-                            border: "1px solid #e2e8f0",
-                            borderRadius: "6px",
-                            overflow: "hidden",
-                            background: "#fff",
-                          }}
-                        >
+                  {isDeptOpen && (
+                    <div style={{ padding: 12, background: "#f8fafc" }}>
+                      {semOptions.map((sem) => {
+                        const semKey = `${dept}-${sem}`;
+                        const isSemOpen = expandedSem === semKey;
+                        const finalSubjects = deptSubjects.filter(
+                          (s) => s.semester === sem
+                        );
+                        return (
                           <div
-                            onClick={() => toggleSem(dept, sem)}
+                            key={sem}
                             style={{
-                              padding: "12px 15px",
-                              cursor: "pointer",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              background: isSemOpen ? "#f1f5f9" : "#fff",
-                              alignItems: "center",
+                              marginBottom: 8,
+                              border: "1px solid #e2e8f0",
+                              borderRadius: 6,
+                              overflow: "hidden",
+                              background: "#fff",
                             }}
                           >
-                            <h4
+                            <div
+                              onClick={() => toggleSem(dept, sem)}
                               style={{
-                                margin: 0,
-                                color: "#475569",
-                                fontWeight: "600",
+                                padding: "12px 15px",
+                                cursor: "pointer",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                background: isSemOpen ? "#f1f5f9" : "#fff",
+                                alignItems: "center",
                               }}
                             >
-                              Semester {sem}
-                            </h4>
-                            <span
-                              style={{ fontSize: "0.7rem", color: "#94a3b8" }}
-                            >
-                              {isSemOpen ? "▲" : "▼"}
-                            </span>
-                          </div>
+                              <h4
+                                style={{
+                                  margin: 0,
+                                  color: "#475569",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Semester {sem}
+                              </h4>
+                              <span
+                                style={{ fontSize: "0.7rem", color: "#94a3b8" }}
+                              >
+                                {isSemOpen ? "▲" : "▼"}
+                              </span>
+                            </div>
 
-                          {isSemOpen && (
-                            <div style={{ padding: "10px" }}>
-                              {finalSubjects.length === 0 ? (
-                                <p
-                                  style={{
-                                    color: "#94a3b8",
-                                    fontSize: "0.8rem",
-                                    fontStyle: "italic",
-                                    textAlign: "center",
-                                    padding: "10px",
-                                  }}
-                                >
-                                  No subjects registered.
-                                </p>
-                              ) : (
-                                finalSubjects.map((sub) => (
-                                  <div
-                                    key={sub.id}
-                                    className="data-item"
+                            {isSemOpen && (
+                              <div style={{ padding: 10 }}>
+                                {finalSubjects.length === 0 ? (
+                                  <p
                                     style={{
-                                      marginBottom: "8px",
-                                      padding: "12px",
-                                      border: "1px solid #f1f5f9",
-                                      borderRadius: "6px",
+                                      color: "#94a3b8",
+                                      fontSize: "0.8rem",
+                                      fontStyle: "italic",
+                                      textAlign: "center",
+                                      padding: 10,
                                     }}
                                   >
-                                    <div className="item-info">
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "10px",
-                                        }}
-                                      >
-                                        <h4
+                                    No subjects registered.
+                                  </p>
+                                ) : (
+                                  finalSubjects.map((sub) => (
+                                    <div
+                                      key={sub.id}
+                                      className="data-item"
+                                      style={{
+                                        marginBottom: 8,
+                                        padding: 12,
+                                        border: "1px solid #f1f5f9",
+                                        borderRadius: 6,
+                                      }}
+                                    >
+                                      <div className="item-info">
+                                        <div
                                           style={{
-                                            margin: 0,
-                                            fontSize: "0.95rem",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 10,
+                                            flexWrap: "wrap",
                                           }}
                                         >
-                                          {sub.subject_name}
-                                        </h4>
-                                        {sub.is_lab && (
-                                          <span
+                                          <h4
                                             style={{
-                                              backgroundColor: "#fee2e2",
-                                              color: "#b91c1c",
-                                              padding: "2px 8px",
-                                              borderRadius: "12px",
-                                              fontSize: "0.65rem",
-                                              fontWeight: "bold",
+                                              margin: 0,
+                                              fontSize: "0.95rem",
                                             }}
                                           >
-                                            LAB
+                                            {sub.subject_name}
+                                          </h4>
+                                          {/* Subject code badge */}
+                                          <span
+                                            style={{
+                                              background: "#eff6ff",
+                                              color: "#1d4ed8",
+                                              padding: "2px 8px",
+                                              borderRadius: 6,
+                                              fontSize: "0.72rem",
+                                              fontWeight: 700,
+                                              letterSpacing: "0.5px",
+                                            }}
+                                          >
+                                            {sub.subject_code || "—"}
                                           </span>
-                                        )}
+                                          {sub.is_lab && (
+                                            <span
+                                              style={{
+                                                backgroundColor: "#fee2e2",
+                                                color: "#b91c1c",
+                                                padding: "2px 8px",
+                                                borderRadius: 12,
+                                                fontSize: "0.65rem",
+                                                fontWeight: "bold",
+                                              }}
+                                            >
+                                              LAB
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p
+                                          style={{
+                                            margin: "4px 0 0",
+                                            fontSize: "0.85rem",
+                                            color: "#64748b",
+                                          }}
+                                        >
+                                          Credits : <b>{sub.weekly_hours}</b>
+                                          &nbsp;·&nbsp; {
+                                            sub.department
+                                          } Sem {sub.semester}
+                                        </p>
                                       </div>
-                                      <p
+                                      <button
+                                        className="btn-ghost"
                                         style={{
-                                          margin: "4px 0 0 0",
-                                          fontSize: "0.9rem",
-                                          color: "#64748b",
+                                          color: "#ef4444",
+                                          fontSize: "0.8rem",
+                                          fontWeight: 600,
+                                          cursor: "pointer",
                                         }}
+                                        onClick={() => deleteSubject(sub.id)}
                                       >
-                                        <b>{sub.weekly_hours}</b> Credits
-                                      </p>
+                                        Remove
+                                      </button>
                                     </div>
-                                    <button
-                                      className="btn-ghost"
-                                      style={{
-                                        color: "#ef4444",
-                                        fontSize: "0.8rem",
-                                        fontWeight: "600",
-                                        cursor: "pointer",
-                                      }}
-                                      onClick={() => deleteSubject(sub.id)}
-                                    >
-                                      Remove
-                                    </button>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
       </div>
-
-      {/* Adding a small global style tag for the pulse animation */}
-      <style>{`
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 };

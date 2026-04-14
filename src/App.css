@@ -454,3 +454,214 @@ select {
 .login-card .form-group {
   margin-bottom: 10px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   RESPONSIVE — Mobile & Tablet
+───────────────────────────────────────────────────────────────────────────── */
+
+/* Section labels in sidebar */
+.nav-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 0 0 6px -2px;
+}
+
+/* Sidebar footer row */
+.sidebar-footer {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-logo {
+  height: 38px;
+  width: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* Close (X) button inside sidebar — hidden on desktop */
+.sidebar-close-btn {
+  display: none;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: #334155;
+  border: none;
+  border-radius: 8px;
+  color: #cbd5e1;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* Mobile top bar — hidden on desktop */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  margin: -40px -40px 24px -40px; /* cancel main-content padding */
+}
+
+.mobile-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #4f46e5;
+}
+
+.hamburger-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #1e293b;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hamburger-btn:hover {
+  background: #f1f5f9;
+}
+
+/* Dim overlay behind sidebar on mobile */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 199;
+}
+
+/* ── Tablet (≤ 1024px) ───────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .main-content {
+    padding: 24px;
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Mobile (≤ 768px) ────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Sidebar slides in from left as a drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    width: 260px;
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
+  .sidebar-close-btn {
+    display: flex;
+  }
+
+  /* Show mobile top bar */
+  .mobile-topbar {
+    display: flex;
+  }
+
+  /* Main content takes full width */
+  .main-content {
+    padding: 0 16px 24px;
+    width: 100%;
+  }
+
+  /* Cards */
+  .card {
+    padding: 16px;
+    border-radius: 10px;
+  }
+
+  /* Form grids → single column */
+  .grid-2 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Tables → horizontal scroll */
+  .data-table,
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Timetable action buttons stack */
+  .data-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* Recent timetable list cards */
+  .recent-list-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* Login card */
+  .login-card {
+    margin: 0 16px;
+    padding: 28px 20px;
+  }
+
+  /* mobile-topbar negative margin fix */
+  .mobile-topbar {
+    margin: 0 -16px;
+    margin-bottom: 20px;
+  }
+}
+
+/* ── Small Mobile (≤ 480px) ─────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .card {
+    padding: 14px;
+  }
+
+  .card-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .main-content {
+    padding: 0 12px 20px;
+  }
+
+  .mobile-topbar {
+    margin: 0 -12px;
+    margin-bottom: 16px;
+  }
+}

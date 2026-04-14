@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
-// import Dashboard from "./components/Dashboard";
 import Sidebar from "./components/Sidebar";
 import TeacherManager from "./components/TeacherManager";
 import RoomManager from "./components/RoomManager";
@@ -11,6 +10,7 @@ import RecentTimetables from "./components/RecentTimetables";
 import Login from "./components/Login";
 import { Toaster } from "react-hot-toast";
 import GenerateAI from "./components/GenerateAI";
+import { Menu } from "lucide-react";
 
 const Placeholder = ({ title }) => (
   <div className="card">
@@ -28,9 +28,20 @@ function App() {
     return sessionStorage.getItem("isLoggedIn") === "true";
   });
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   useEffect(() => {
     sessionStorage.setItem("activePage", activePage);
   }, [activePage]);
+
+  // Close sidebar on resize to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) setSidebarOpen(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const handleLogin = () => {
     setIsLoggedIn(true);
@@ -38,23 +49,17 @@ function App() {
   };
 
   const handleLogout = () => {
-    const justConfirm = window.confirm("Do you want to logout ?");
-    if (justConfirm) {
+    if (window.confirm("Do you want to logout?")) {
       setIsLoggedIn(false);
       sessionStorage.removeItem("isLoggedIn");
       sessionStorage.removeItem("activePage");
     }
-    return;
   };
 
-  if (!isLoggedIn) {
-    return <Login onLogin={handleLogin} />;
-  }
+  if (!isLoggedIn) return <Login onLogin={handleLogin} />;
 
   const renderPage = () => {
     switch (activePage) {
-      // case "dashboard":
-      // return <Dashboard />;
       case "generate":
         return <GenerateAI />;
       case "recent":
@@ -63,8 +68,6 @@ function App() {
         return <TeacherManager />;
       case "rooms":
         return <RoomManager />;
-      case "generate":
-        return <Placeholder title="AI Generation Workspace" />;
       case "subjects":
         return <SubjectManager />;
       case "constraints":
@@ -72,19 +75,37 @@ function App() {
       case "live":
         return <LiveStatus />;
       default:
-        return <Placeholder title="generate" />;
+        return <GenerateAI />;
     }
   };
 
   return (
     <div className="app-container">
       <Toaster position="top-right" reverseOrder={false} />
+
       <Sidebar
         activePage={activePage}
         setActivePage={setActivePage}
         onLogout={handleLogout}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
-      <main className="main-content">{renderPage()}</main>
+
+      <main className="main-content">
+        {/* Mobile top bar */}
+        <div className="mobile-topbar">
+          <button
+            className="hamburger-btn"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+          >
+            <Menu size={22} />
+          </button>
+          <span className="mobile-title">TimeTable AI</span>
+        </div>
+
+        {renderPage()}
+      </main>
     </div>
   );
 }

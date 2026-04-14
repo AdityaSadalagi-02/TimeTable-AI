@@ -1,21 +1,31 @@
 import { supabase } from "../supabaseClient";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GEMINI SETUP
+// ─────────────────────────────────────────────────────────────────────────────
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const model = genAI.getGenerativeModel({
   model: "gemini-3.1-flash-lite-preview",
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 const parseJSON = (text) => {
   try {
     const cleaned = text.replace(/```json|```/g, "").trim();
     return JSON.parse(cleaned);
   } catch (err) {
     console.error("AI RAW RESPONSE:", text);
-    throw new Error("Invalid JSON from AI - could not parse timetable.");
+    throw new Error("Invalid JSON from AI – could not parse timetable.");
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FETCH ALL DATA NEEDED FOR GENERATION
+// ─────────────────────────────────────────────────────────────────────────────
 export const fetchGenerationData = async (semester, department) => {
   const { data: subjects, error: subErr } = await supabase
     .from("subjects")
@@ -73,6 +83,10 @@ export const fetchGenerationData = async (semester, department) => {
     },
   };
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUILD SLOT LIST (with breaks / lunch)
+// ─────────────────────────────────────────────────────────────────────────────
 export const createSlotsWithBreaks = (c) => {
   const slots = [];
 
@@ -121,6 +135,14 @@ export const createSlotsWithBreaks = (c) => {
   return slots;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LAB HELPERS — shared between scheduler and validator
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the combined display label for all labs.
+ * e.g.  ["WEB LAB", "CN LAB"]  →  "WEB LAB/CN LAB"
+ */
 export const getLabLabel = (labs) =>
   labs.length > 1
     ? labs.map((l) => l.subject_name).join("/")
@@ -134,6 +156,9 @@ export const getLabLabel = (labs) =>
  */
 const slotIndexIn = (orderedSlots, label) => orderedSlots.indexOf(label);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JS DETERMINISTIC SCHEDULER
+// ─────────────────────────────────────────────────────────────────────────────
 export const buildTimetableWithJS = (subjects, slots, constraints) => {
   const DAYS = [
     "Monday",
@@ -185,6 +210,10 @@ export const buildTimetableWithJS = (subjects, slots, constraints) => {
   DAYS.forEach((d) => (dayUsed[d] = new Set()));
 
   // ── STEP 1: Place each lab in exactly `labDuration` CONSECUTIVE slots ──
+  // Key fix: we work from classSlots (the true order), not a filtered list,
+  // so consecutive means adjacent in the actual day schedule.
+  // We prefer pre-lunch blocks; fall back to post-lunch if needed.
+  // Each lab gets its own day (round-robin across days).
   let labDayIdx = 0;
 
   labs.forEach((lab) => {
@@ -234,6 +263,9 @@ export const buildTimetableWithJS = (subjects, slots, constraints) => {
   });
 
   // ── STEP 2: Round-robin theory placement ───────────────────────────────
+  // Iterate orderedSlots (pre-lunch first) so mornings fill before afternoons.
+  // For each slot, rotate which day we start from (dayOffset = slotIdx % 6)
+  // so that the same time column gets DIFFERENT subjects across days.
   for (let slotIdx = 0; slotIdx < orderedSlots.length; slotIdx++) {
     const slot = orderedSlots[slotIdx];
     const dayOffset = slotIdx % DAYS.length;
@@ -305,6 +337,9 @@ export const buildTimetableWithJS = (subjects, slots, constraints) => {
   return timetable;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTRUCT PROMPT (AI reviews & patches the JS-generated timetable)
+// ─────────────────────────────────────────────────────────────────────────────
 export const constructGeminiPrompt = (
   subjects,
   slots,
@@ -369,6 +404,9 @@ Return ONLY the complete corrected timetable as strict JSON. No markdown. No exp
 `;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CALL GEMINI
+// ─────────────────────────────────────────────────────────────────────────────
 export const generateWithGemini = async (prompt) => {
   try {
     const result = await model.generateContent({
@@ -383,6 +421,10 @@ export const generateWithGemini = async (prompt) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JS VALIDATION ENGINE
+// ─────────────────────────────────────────────────────────────────────────────
+
 const buildSubjectTeacherMap = (teacherLinks) => {
   const map = {};
   (teacherLinks || []).forEach((link) => {
@@ -392,6 +434,10 @@ const buildSubjectTeacherMap = (teacherLinks) => {
   return map;
 };
 
+/**
+ * Full conflict detection.
+ * Returns array of conflict strings.
+ */
 export const validateTimetable = (
   timetable,
   subjects,
@@ -410,7 +456,12 @@ export const validateTimetable = (
   const subjectWeeklyCount = {};
   subjects.forEach((s) => (subjectWeeklyCount[s.subject_name] = 0));
 
-  const teacherSlotUsage = {}; // "teacherId_day_slot" -> subject
+  const teacherSlotUsage = {};
+
+  // Combined lab label — cells with this value are intentionally repeated across consecutive slots
+  const labSubjectList = subjects.filter((s) => s.is_lab);
+  const combinedLabLabel =
+    labSubjectList.length > 0 ? getLabLabel(labSubjectList) : null;
 
   for (const day in timetable) {
     const daySubjectSeen = new Set();
@@ -424,10 +475,14 @@ export const validateTimetable = (
         subjectWeeklyCount[subject]++;
       }
 
+      // isLab = combined label match OR individual subject marked is_lab
       const subjectMeta = subjects.find((s) => s.subject_name === subject);
-      const isLab = subjectMeta?.is_lab || false;
+      const isLab =
+        (combinedLabLabel && subject === combinedLabLabel) ||
+        subjectMeta?.is_lab ||
+        false;
 
-      // Duplicate per day (for theory only)
+      // Skip duplicate check for lab cells — multiple slots intentionally share the same label
       if (!isLab) {
         if (daySubjectSeen.has(subject)) {
           conflicts.push(
@@ -469,6 +524,10 @@ export const validateTimetable = (
     }
   });
 
+  // Lab continuity check
+  // The timetable stores the COMBINED lab label (e.g. "WEB LAB/CN LAB") in every
+  // slot of a lab block. We just need to verify each occurrence is adjacent to
+  // another slot with the same combined label.
   const labsInSubjects = subjects.filter((s) => s.is_lab);
   if (labsInSubjects.length > 0) {
     const combinedLabel = getLabLabel(labsInSubjects);
@@ -496,6 +555,9 @@ export const validateTimetable = (
   return conflicts;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// JS FAST-FIXER
+// ─────────────────────────────────────────────────────────────────────────────
 export const fixTimetableWithJS = (timetable, subjects) => {
   const result = JSON.parse(JSON.stringify(timetable));
 
@@ -548,6 +610,9 @@ export const fixTimetableWithJS = (timetable, subjects) => {
   return result;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFLICT-FIX PROMPT
+// ─────────────────────────────────────────────────────────────────────────────
 export const constructConflictFixPrompt = (timetable, conflicts, subjects) => {
   return `You are an expert timetable conflict resolver.
 
@@ -590,6 +655,9 @@ NO explanation, NO markdown, ONLY JSON.
 `;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN ORCHESTRATOR
+// ─────────────────────────────────────────────────────────────────────────────
 export const generateTimetableFull = async (
   semester,
   department,
