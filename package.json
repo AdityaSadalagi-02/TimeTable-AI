@@ -14,7 +14,9 @@
     "@mui/material": "5.15.0",
     "@emotion/react": "11.11.0",
     "@emotion/styled": "11.11.0",
-    "@google/generative-ai": "0.24.1"
+    "@google/generative-ai": "0.24.1",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2"
   },
   "devDependencies": {
     "@types/react": "19.0.0",
@@ -28,10 +30,5 @@
     "test": "react-scripts test --env=jsdom",
     "eject": "react-scripts eject"
   },
-  "browserslist": [
-    ">0.2%",
-    "not dead",
-    "not ie <= 11",
-    "not op_mini all"
-  ]
+  "browserslist": [">0.2%", "not dead", "not ie <= 11", "not op_mini all"]
 }
