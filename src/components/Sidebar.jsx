@@ -14,7 +14,7 @@ import {
 const Sidebar = ({ activePage, setActivePage, onLogout, isOpen, onClose }) => {
   const mainItems = [
     { id: "generate", label: "Generate AI", icon: Sparkles },
-    { id: "live", label: "Live Status", icon: Radio },
+    // { id: "live", label: "Live Status", icon: Radio },
     { id: "recent", label: "Recent TimeTables", icon: History },
   ];
 
