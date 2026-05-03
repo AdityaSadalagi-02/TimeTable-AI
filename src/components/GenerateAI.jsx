@@ -440,7 +440,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
           disabled={loading}
           style={{ marginTop: 20, height: 50, fontSize: "1rem" }}
         >
-          {loading ? statusMsg || "Generating…" : "🚀 Generate Timetable"}
+          {loading ? "Generating…" : "🚀 Generate Timetable"}
         </Button>
 
         {loading && statusMsg && (
