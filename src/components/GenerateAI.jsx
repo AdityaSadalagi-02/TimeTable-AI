@@ -274,12 +274,11 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
   const handleSave = async () => {
     if (!generationData) return;
     setSaving(true);
-    const tid = toast.loading("Saving timetable…");
 
     try {
       const { timetable, data } = generationData;
 
-      // ── 1. Save full timetable snapshot to saved_timetables ──────────────
+      // ── 1. Save timetable snapshot — critical, must succeed ──────────────
       const { data: saved, error: saveErr } = await supabase
         .from("saved_timetables")
         .insert([
@@ -295,14 +294,33 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
 
       if (saveErr) throw new Error("Save failed: " + saveErr.message);
 
-      // ── 2. Update teacher_availability — mark each assigned slot as busy ─
+      // ── Dismiss immediately after critical save ───────────────────────────
+      toast.success("Timetable saved!", { duration: 3000 });
+      setSaving(false);
+
+      // ── 2. Teacher availability — background, non-blocking ───────────────
       const subjectTeacherMap = {};
       (data.resources.teacherLinks || []).forEach((link) => {
-        const name = link.subjects?.subject_name;
-        if (name) subjectTeacherMap[name] = link.teacher_id;
+        const subName = link.subjects?.subject_name;
+        if (subName) subjectTeacherMap[subName] = link.teacher_id;
       });
 
+      const labSubjectsForMap = data.subjects.filter((s) => s.is_lab);
+      const combinedLabLabelForMap =
+        labSubjectsForMap.length > 0
+          ? labSubjectsForMap.map((l) => l.subject_name).join("/")
+          : null;
+
+      if (combinedLabLabelForMap) {
+        labSubjectsForMap.forEach((lab) => {
+          const tId = subjectTeacherMap[lab.subject_name];
+          if (tId) subjectTeacherMap[combinedLabLabelForMap] = tId;
+        });
+      }
+
       const availabilityRows = [];
+      const semesterId = parseInt(selectedSem);
+
       for (const day in timetable) {
         for (const slot in timetable[day]) {
           const subject = timetable[day][slot];
@@ -313,6 +331,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
             teacher_id: teacherId,
             day_of_week: day,
             time_slot: slot,
+            semester_id: semesterId,
             is_busy: true,
           });
         }
@@ -325,10 +344,14 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
             onConflict: "teacher_id,day_of_week,time_slot",
           });
         if (availErr)
-          console.warn("teacher_availability update warn:", availErr.message);
+          console.warn("teacher_availability warn:", availErr.message);
+        else
+          console.log(
+            `✅ ${availabilityRows.length} teacher slots marked busy`
+          );
       }
 
-      // ── 3. Update room bookings — assign rooms by subject type ────────────
+      // ── 3. Room bookings — background, non-blocking ──────────────────────
       const rooms = data.resources.rooms || [];
       const theoryRooms = rooms.filter((r) => r.room_type === "Theory");
       const labRooms = rooms.filter((r) => r.room_type === "Lab");
@@ -346,18 +369,13 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
         for (const slot in timetable[day]) {
           const subject = timetable[day][slot];
           if (!subject || subject === "-") continue;
-
           const isLabSlot = combinedLabLabel && subject === combinedLabLabel;
           let assignedRoom = null;
-
           if (isLabSlot && labRooms.length > 0) {
-            assignedRoom = labRooms[labRoomIdx % labRooms.length];
-            labRoomIdx++;
+            assignedRoom = labRooms[labRoomIdx++ % labRooms.length];
           } else if (!isLabSlot && theoryRooms.length > 0) {
-            assignedRoom = theoryRooms[theoryRoomIdx % theoryRooms.length];
-            theoryRoomIdx++;
+            assignedRoom = theoryRooms[theoryRoomIdx++ % theoryRooms.length];
           }
-
           if (assignedRoom) {
             roomBookingRows.push({
               room_id: assignedRoom.id,
@@ -378,13 +396,10 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
           .upsert(roomBookingRows, {
             onConflict: "room_id,day_of_week,time_slot",
           });
-        if (roomErr)
-          console.warn("room_bookings update warn:", roomErr.message);
+        if (roomErr) console.warn("room_bookings warn:", roomErr.message);
       }
-
-      toast.success(`Timetable saved.`, { id: tid, duration: 4000 });
     } catch (err) {
-      toast.error(err.message || "Save failed", { id: tid });
+      toast.error(err.message || "Save failed");
     } finally {
       setSaving(false);
     }
@@ -440,7 +455,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
           disabled={loading}
           style={{ marginTop: 20, height: 50, fontSize: "1rem" }}
         >
-          {loading ? "Generating…" : "🚀 Generate Timetable"}
+          {loading ? statusMsg || "Generating…" : "🚀 Generate Timetable"}
         </Button>
 
         {loading && statusMsg && (
@@ -590,6 +605,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                                 ⚠️
                               </span>
                             )}
+                            <span style={styles.labBadge}>🔬 LAB</span>
                             <div
                               style={{
                                 fontWeight: 700,
@@ -598,6 +614,15 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                               }}
                             >
                               {cell.subject}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.72rem",
+                                color: "#64748b",
+                                marginTop: 2,
+                              }}
+                            >
+                              {cell.labSpan} consecutive slots
                             </div>
                           </td>
                         );
@@ -699,9 +724,6 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// STYLES
-// ─────────────────────────────────────────────────────────────────────────────
 const styles = {
   card: {
     background: "#fff",
