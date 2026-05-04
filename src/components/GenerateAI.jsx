@@ -225,20 +225,23 @@ const GenerateAI = () => {
 
       const changePrompt = `You are a timetable editor.
 
-Current timetable:
-${JSON.stringify(timetable, null, 2)}
+      Current timetable:
+      ${JSON.stringify(timetable, null, 2)}
 
-User request: "${modInput}"
+      User request: "${modInput}"
 
-Subject list (respect weekly limits):
-${JSON.stringify(
-  data.subjects.map((s) => ({ name: s.subject_name, max: s.weekly_hours }))
-)}
+      Subject list (respect weekly limits):
+      ${JSON.stringify(
+        data.subjects.map((s) => ({
+          name: s.subject_name,
+          max: s.weekly_hours,
+        }))
+      )}
 
-Apply the user's requested change. Keep all other slots EXACTLY the same.
-Do NOT exceed weekly_hours for any subject.
-Do NOT place a theory subject twice on the same day.
-Return ONLY the complete updated timetable as strict JSON — no explanation, no markdown.`;
+      Apply the user's requested change. Keep all other slots EXACTLY the same.
+      Do NOT exceed weekly_hours for any subject.
+      Do NOT place a theory subject twice on the same day.
+      Return ONLY the complete updated timetable as strict JSON — no explanation, no markdown.`;
 
       let updated = await generateWithGemini(changePrompt);
       updated = fixTimetableWithJS(updated, data.subjects);
@@ -264,7 +267,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
         toast.success("Changes applied successfully!", { id: tid });
       }
     } catch (err) {
-      toast.error(err.message || "Failed to apply changes", { id: tid });
+      toast.error("Failed to apply changes", { id: tid });
     } finally {
       setModLoading(false);
     }
@@ -505,6 +508,54 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
         </div>
       )}
 
+      {!matrix && (
+        <>
+          <div style={{ ...styles.card, marginTop: 16 }}>
+            <h3>Steps to generate a timetable :</h3>
+            <p style={{ color: "rgb(100,116,139)", marginBottom: "24px" }}>
+              Follow the steps clearly to avoid the confusions.
+            </p>
+            <ol style={{ marginLeft: "16px" }}>
+              <li>
+                <b>Enter Basic Details</b> - Provide general information like
+                class, days, and periods.
+              </li>
+              <li>
+                <b>Add Subjects</b> - List all subjects that need to be included
+                in the timetable.
+              </li>
+              <li>
+                <b>Add Teachers</b> - Enter teacher details and assign subjects
+                to them.
+              </li>
+              <li>
+                <b>Define Constraints</b> - Set rules and limitations for
+                scheduling.
+              </li>
+              <li>
+                <b>Set Preferences</b> - Specify any preferred timings or
+                arrangements.
+              </li>
+              <li>
+                <b>Review Inputs</b> - Check all entered details before
+                generating the timetable.
+              </li>
+              <li>
+                <b>Generate Timetable</b> - Let the AI create the timetable
+                based on inputs.
+              </li>
+              <li>
+                <b>View & Adjust Output</b> - Review the generated timetable and
+                make changes if needed.
+              </li>
+              <li>
+                <b>Export / Save</b> - Download or save the final timetable.
+              </li>
+            </ol>
+          </div>
+        </>
+      )}
+
       {/* TIMETABLE GRID */}
       {matrix && (
         <>
@@ -668,9 +719,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
 
           {/* MODIFICATION PANEL */}
           <div style={{ ...styles.card, marginTop: 16 }}>
-            <h3 style={{ marginBottom: 8 }}>
-              ✏️ Request Changes (Natural Language)
-            </h3>
+            <h3 style={{ marginBottom: 8 }}>✏️ Request Changes</h3>
             <p
               style={{
                 color: "#64748b",
@@ -772,7 +821,7 @@ const styles = {
     minWidth: 90,
   },
   labCell: {
-    border: "2px solid #6366f1",
+    // border: "2px solid #6366f1",
     padding: "10px 12px",
     textAlign: "center",
     cursor: "grab",
