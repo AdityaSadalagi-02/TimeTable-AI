@@ -405,7 +405,6 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
     }
   };
 
-  // ── RENDER ───────────────────────────────────────────────────────────────
   return (
     <div style={{ maxWidth: "1400px", margin: "30px auto", padding: "0 16px" }}>
       {/* CONTROL PANEL */}
@@ -455,10 +454,10 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
           disabled={loading}
           style={{ marginTop: 20, height: 50, fontSize: "1rem" }}
         >
-          {loading ? statusMsg || "Generating…" : "🚀 Generate Timetable"}
+          {loading ? "Generating…" : "🚀 Generate Timetable"}
         </Button>
 
-        {loading && statusMsg && (
+        {/* {loading && statusMsg && (
           <p
             style={{
               marginTop: 10,
@@ -469,7 +468,7 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
           >
             {statusMsg}
           </p>
-        )}
+        )} */}
       </div>
 
       {/* CONFLICT PANEL */}
@@ -605,7 +604,6 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                                 ⚠️
                               </span>
                             )}
-                            <span style={styles.labBadge}>🔬 LAB</span>
                             <div
                               style={{
                                 fontWeight: 700,
@@ -614,15 +612,6 @@ Return ONLY the complete updated timetable as strict JSON — no explanation, no
                               }}
                             >
                               {cell.subject}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "0.72rem",
-                                color: "#64748b",
-                                marginTop: 2,
-                              }}
-                            >
-                              {cell.labSpan} consecutive slots
                             </div>
                           </td>
                         );
