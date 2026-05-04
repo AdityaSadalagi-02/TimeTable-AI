@@ -1,19 +1,14 @@
 import { supabase } from "../supabaseClient";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GEMINI SETUP
-// ─────────────────────────────────────────────────────────────────────────────
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-console.log("API Key:", import.meta.env.VITE_GEMINI_API_KEY);
+const API_KEY = "AIzaSyDDlKwj - X5ffyxNPGRfa3OaTFKuA6qg9HY";
+const genAI = new GoogleGenerativeAI(API_KEY);
+console.log("API Key:", API_KEY);
 
 const model = genAI.getGenerativeModel({
   model: "gemini-3.1-flash-lite-preview",
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
 const parseJSON = (text) => {
   try {
     const cleaned = text.replace(/```json|```/g, "").trim();
@@ -24,9 +19,6 @@ const parseJSON = (text) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FETCH ALL DATA NEEDED FOR GENERATION
-// ─────────────────────────────────────────────────────────────────────────────
 export const fetchGenerationData = async (semester, department) => {
   const { data: subjects, error: subErr } = await supabase
     .from("subjects")
@@ -85,9 +77,6 @@ export const fetchGenerationData = async (semester, department) => {
   };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BUILD SLOT LIST (with breaks / lunch)
-// ─────────────────────────────────────────────────────────────────────────────
 export const createSlotsWithBreaks = (c) => {
   const slots = [];
 
@@ -136,10 +125,6 @@ export const createSlotsWithBreaks = (c) => {
   return slots;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LAB HELPERS — shared between scheduler and validator
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
  * Returns the combined display label for all labs.
  * e.g.  ["WEB LAB", "CN LAB"]  →  "WEB LAB/CN LAB"
@@ -157,9 +142,6 @@ export const getLabLabel = (labs) =>
  */
 const slotIndexIn = (orderedSlots, label) => orderedSlots.indexOf(label);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JS DETERMINISTIC SCHEDULER
-// ─────────────────────────────────────────────────────────────────────────────
 export const buildTimetableWithJS = (subjects, slots, constraints) => {
   const DAYS = [
     "Monday",
@@ -338,9 +320,6 @@ export const buildTimetableWithJS = (subjects, slots, constraints) => {
   return timetable;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTRUCT PROMPT (AI reviews & patches the JS-generated timetable)
-// ─────────────────────────────────────────────────────────────────────────────
 export const constructGeminiPrompt = (
   subjects,
   slots,
@@ -377,37 +356,34 @@ export const constructGeminiPrompt = (
 
   return `You are an expert academic timetable validator and patcher.
 
-A JS scheduling algorithm already generated this timetable. Your job is ONLY to:
-1. Check for any remaining rule violations
-2. Fix ONLY broken slots — do NOT reshuffle correct slots
-3. Return the full corrected timetable
+  A JS scheduling algorithm already generated this timetable. Your job is ONLY to:
+  1. Check for any remaining rule violations
+  2. Fix ONLY broken slots — do NOT reshuffle correct slots
+  3. Return the full corrected timetable
 
-Department: ${department}
+  Department: ${department}
 
-===== CURRENT TIMETABLE =====
-${JSON.stringify(jsTimetable, null, 2)}
+  ===== CURRENT TIMETABLE =====
+  ${JSON.stringify(jsTimetable, null, 2)}
 
-===== SUBJECTS & WEEKLY LIMITS =====
-${JSON.stringify(cleanSubjects)}
+  ===== SUBJECTS & WEEKLY LIMITS =====
+  ${JSON.stringify(cleanSubjects)}
 
-===== RULES =====
-1. Every day MUST have at least one class (not all dashes)
-2. No theory subject appears more than once per day
-3. Pre-lunch slots must be filled BEFORE post-lunch — if pre-lunch is "-" but post-lunch has a subject on the same day, swap them
-4. No same subject in the same time column for more than 2 consecutive days
-5. Lab ("${
+  ===== RULES =====
+  1. Every day MUST have at least one class (not all dashes)
+  2. No theory subject appears more than once per day
+  3. Pre-lunch slots must be filled BEFORE post-lunch — if pre-lunch is "-" but post-lunch has a subject on the same day, swap them
+  4. No same subject in the same time column for more than 2 consecutive days
+  5. Lab ("${
     labLabel || "LAB"
   }") must occupy exactly ${labDuration} consecutive slots on same day
-6. No subject exceeds its weekly_hours total
+  6. No subject exceeds its weekly_hours total
 
-===== OUTPUT =====
-Return ONLY the complete corrected timetable as strict JSON. No markdown. No explanation.
-`;
+  ===== OUTPUT =====
+  Return ONLY the complete corrected timetable as strict JSON. No markdown. No explanation.
+  `;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CALL GEMINI
-// ─────────────────────────────────────────────────────────────────────────────
 export const generateWithGemini = async (prompt) => {
   try {
     const result = await model.generateContent({
@@ -421,10 +397,6 @@ export const generateWithGemini = async (prompt) => {
     throw new Error("AI generation failed: " + error.message);
   }
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// JS VALIDATION ENGINE
-// ─────────────────────────────────────────────────────────────────────────────
 
 const buildSubjectTeacherMap = (teacherLinks) => {
   const map = {};
@@ -556,9 +528,6 @@ export const validateTimetable = (
   return conflicts;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JS FAST-FIXER
-// ─────────────────────────────────────────────────────────────────────────────
 export const fixTimetableWithJS = (timetable, subjects) => {
   const result = JSON.parse(JSON.stringify(timetable));
 
@@ -611,9 +580,6 @@ export const fixTimetableWithJS = (timetable, subjects) => {
   return result;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONFLICT-FIX PROMPT
-// ─────────────────────────────────────────────────────────────────────────────
 export const constructConflictFixPrompt = (timetable, conflicts, subjects) => {
   return `You are an expert timetable conflict resolver.
 

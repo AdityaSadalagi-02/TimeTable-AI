@@ -20,7 +20,6 @@ const DAYS = [
   "Saturday",
 ];
 
-// ─── colour palette ──────────────────────────────────────────────────────────
 const PALETTE = [
   "#dbeafe",
   "#dcfce7",
@@ -42,7 +41,22 @@ const subjectColor = (name) => {
   return colorCache[name];
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+const steps = [
+  { title: "Enter Basic Details", desc: "Provide class, days, and periods." },
+  { title: "Add Subjects", desc: "List all subjects." },
+  { title: "Add Teachers", desc: "Assign teachers to subjects." },
+  { title: "Define Constraints", desc: "Set scheduling rules." },
+  { title: "Set Preferences", desc: "Preferred timings." },
+  { title: "Review Inputs", desc: "Verify details." },
+  {
+    title: "Generate Timetable",
+    desc: "AI generates schedule.",
+    highlight: true,
+  },
+  { title: "View & Adjust", desc: "Modify if needed." },
+  { title: "Export / Save", desc: "Download timetable." },
+];
+
 const GenerateAI = () => {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
@@ -511,47 +525,67 @@ const GenerateAI = () => {
       {!matrix && (
         <>
           <div style={{ ...styles.card, marginTop: 16 }}>
-            <h3>Steps to generate a timetable :</h3>
-            <p style={{ color: "rgb(100,116,139)", marginBottom: "24px" }}>
-              Follow the steps clearly to avoid the confusions.
-            </p>
-            <ol style={{ marginLeft: "16px" }}>
-              <li>
-                <b>Enter Basic Details</b> - Provide general information like
-                class, days, and periods.
-              </li>
-              <li>
-                <b>Add Subjects</b> - List all subjects that need to be included
-                in the timetable.
-              </li>
-              <li>
-                <b>Add Teachers</b> - Enter teacher details and assign subjects
-                to them.
-              </li>
-              <li>
-                <b>Define Constraints</b> - Set rules and limitations for
-                scheduling.
-              </li>
-              <li>
-                <b>Set Preferences</b> - Specify any preferred timings or
-                arrangements.
-              </li>
-              <li>
-                <b>Review Inputs</b> - Check all entered details before
-                generating the timetable.
-              </li>
-              <li>
-                <b>Generate Timetable</b> - Let the AI create the timetable
-                based on inputs.
-              </li>
-              <li>
-                <b>View & Adjust Output</b> - Review the generated timetable and
-                make changes if needed.
-              </li>
-              <li>
-                <b>Export / Save</b> - Download or save the final timetable.
-              </li>
-            </ol>
+            <h3 style={{ marginBottom: "16px" }}>
+              Steps to generate a timetable
+            </h3>
+
+            <div style={{ position: "relative", marginLeft: "20px" }}>
+              {/* Vertical line */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: "7px",
+                  top: 0,
+                  bottom: 0,
+                  width: "2px",
+                  background: "#cbd5e1",
+                }}
+              />
+
+              {steps.map((step, index) => (
+                <div
+                  key={index}
+                  style={{
+                    position: "relative",
+                    marginBottom: index === steps.length - 1 ? 0 : "20px",
+                  }}
+                >
+                  {/* Circle */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "-2px",
+                      top: "2px",
+                      width: "20px",
+                      height: "20px",
+                      borderRadius: "50%",
+                      background: step.highlight ? "#22c55e" : "#6366f1",
+                      color: "#fff",
+                      fontSize: "12px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {index + 1}
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ marginLeft: "30px" }}>
+                    <b>{step.title}</b>
+                    <p
+                      style={{
+                        margin: "4px 0",
+                        color: "#64748b",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      {step.desc}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       )}

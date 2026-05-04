@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 const Login = ({ onLogin }) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const handleLoginSubmit = (e) => {
     e.preventDefault();
@@ -14,7 +15,8 @@ const Login = ({ onLogin }) => {
       toast.success("Welcome back, Admin!");
       onLogin();
     } else {
-      toast.error("Invalid credentials. Try again.");
+      setError("Invalid credentials. Try again.");
+      // toast.error("Invalid credentials. Try again.");
     }
   };
 
@@ -49,6 +51,7 @@ const Login = ({ onLogin }) => {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          {error && <p style={{ color: "red" }}>{error}</p>}
 
           <button
             type="submit"
