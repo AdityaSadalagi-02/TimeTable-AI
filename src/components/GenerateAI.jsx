@@ -20,7 +20,7 @@ const DAYS = [
   "Saturday",
 ];
 
-// ─── colour palette ──────────────────────────────────────────────────────────
+//colour palette
 const PALETTE = [
   "#dbeafe",
   "#dcfce7",
@@ -42,7 +42,6 @@ const subjectColor = (name) => {
   return colorCache[name];
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
 const GenerateAI = () => {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
@@ -58,7 +57,7 @@ const GenerateAI = () => {
   const [modLoading, setModLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // ── HELPERS ─────────────────────────────────────────────────────────────
+  //HELPERS
 
   /**
    * Build the display matrix from a flat timetable + slots list.
@@ -127,7 +126,7 @@ const GenerateAI = () => {
     setMatrix(newMatrix);
   };
 
-  // ── DRAG & DROP ──────────────────────────────────────────────────────────
+  //DRAG & DROP
   const handleDragStart = (day, slotLabel) =>
     setDraggedCell({ day, slotLabel });
 
@@ -162,7 +161,7 @@ const GenerateAI = () => {
     setDraggedCell(null);
 
     if (newConflicts.length > 0) {
-      toast(`Swapped! But ${newConflicts.length} conflict(s) detected.`, {
+      toast(`Swapped! But ${newConflicts.length} conflicts detected.`, {
         icon: "⚠️",
       });
     } else {
@@ -170,7 +169,7 @@ const GenerateAI = () => {
     }
   };
 
-  // ── GENERATE ─────────────────────────────────────────────────────────────
+  //GENERATE
   const handleGenerate = async () => {
     setLoading(true);
     setMatrix(null);
@@ -214,7 +213,7 @@ const GenerateAI = () => {
     }
   };
 
-  // ── NATURAL-LANGUAGE CHANGES ─────────────────────────────────────────────
+  //NATURAL-LANGUAGE CHANGES
   const handleApplyChanges = async () => {
     if (!modInput.trim()) return toast.error("Describe the change you want.");
     setModLoading(true);
@@ -225,17 +224,12 @@ const GenerateAI = () => {
 
       const changePrompt = `You are a timetable editor.
 
-      Current timetable:
-      ${JSON.stringify(timetable, null, 2)}
+      Current timetable:${JSON.stringify(timetable, null, 2)}
 
       User request: "${modInput}"
 
-      Subject list (respect weekly limits):
-      ${JSON.stringify(
-        data.subjects.map((s) => ({
-          name: s.subject_name,
-          max: s.weekly_hours,
-        }))
+      Subject list (respect weekly limits):${JSON.stringify(
+        data.subjects.map((s) => ({ name: s.subject_name, max: s.weekly_hours }))
       )}
 
       Apply the user's requested change. Keep all other slots EXACTLY the same.
@@ -267,13 +261,13 @@ const GenerateAI = () => {
         toast.success("Changes applied successfully!", { id: tid });
       }
     } catch (err) {
-      toast.error("Failed to apply changes", { id: tid });
+      toast.error(err.message || "Failed to apply changes", { id: tid });
     } finally {
       setModLoading(false);
     }
   };
 
-  // ── SAVE ─────────────────────────────────────────────────────────────────
+  //SAVE
   const handleSave = async () => {
     if (!generationData) return;
     setSaving(true);
@@ -297,11 +291,11 @@ const GenerateAI = () => {
 
       if (saveErr) throw new Error("Save failed: " + saveErr.message);
 
-      // ── Dismiss immediately after critical save ───────────────────────────
+      //Dismiss immediately after critical save
       toast.success("Timetable saved!", { duration: 3000 });
       setSaving(false);
 
-      // ── 2. Teacher availability — background, non-blocking ───────────────
+      // ── 2. Teacher availability — background, non-blocking
       const subjectTeacherMap = {};
       (data.resources.teacherLinks || []).forEach((link) => {
         const subName = link.subjects?.subject_name;
@@ -354,7 +348,7 @@ const GenerateAI = () => {
           );
       }
 
-      // ── 3. Room bookings — background, non-blocking ──────────────────────
+      // ── 3. Room bookings — background, non-blocking
       const rooms = data.resources.rooms || [];
       const theoryRooms = rooms.filter((r) => r.room_type === "Theory");
       const labRooms = rooms.filter((r) => r.room_type === "Lab");
@@ -408,6 +402,7 @@ const GenerateAI = () => {
     }
   };
 
+
   return (
     <div style={{ maxWidth: "1400px", margin: "30px auto", padding: "0 16px" }}>
       {/* CONTROL PANEL */}
@@ -457,10 +452,10 @@ const GenerateAI = () => {
           disabled={loading}
           style={{ marginTop: 20, height: 50, fontSize: "1rem" }}
         >
-          {loading ? "Generating…" : "🚀 Generate Timetable"}
+          {loading ? statusMsg || "Generating…" : "🚀 Generate Timetable"}
         </Button>
 
-        {/* {loading && statusMsg && (
+        {loading && statusMsg && (
           <p
             style={{
               marginTop: 10,
@@ -471,7 +466,7 @@ const GenerateAI = () => {
           >
             {statusMsg}
           </p>
-        )} */}
+        )}
       </div>
 
       {/* CONFLICT PANEL */}
@@ -506,54 +501,6 @@ const GenerateAI = () => {
             Drag-and-drop slots to fix manually, or use the chat box below.
           </p>
         </div>
-      )}
-
-      {!matrix && (
-        <>
-          <div style={{ ...styles.card, marginTop: 16 }}>
-            <h3>Steps to generate a timetable :</h3>
-            <p style={{ color: "rgb(100,116,139)", marginBottom: "24px" }}>
-              Follow the steps clearly to avoid the confusions.
-            </p>
-            <ol style={{ marginLeft: "16px" }}>
-              <li>
-                <b>Enter Basic Details</b> - Provide general information like
-                class, days, and periods.
-              </li>
-              <li>
-                <b>Add Subjects</b> - List all subjects that need to be included
-                in the timetable.
-              </li>
-              <li>
-                <b>Add Teachers</b> - Enter teacher details and assign subjects
-                to them.
-              </li>
-              <li>
-                <b>Define Constraints</b> - Set rules and limitations for
-                scheduling.
-              </li>
-              <li>
-                <b>Set Preferences</b> - Specify any preferred timings or
-                arrangements.
-              </li>
-              <li>
-                <b>Review Inputs</b> - Check all entered details before
-                generating the timetable.
-              </li>
-              <li>
-                <b>Generate Timetable</b> - Let the AI create the timetable
-                based on inputs.
-              </li>
-              <li>
-                <b>View & Adjust Output</b> - Review the generated timetable and
-                make changes if needed.
-              </li>
-              <li>
-                <b>Export / Save</b> - Download or save the final timetable.
-              </li>
-            </ol>
-          </div>
-        </>
       )}
 
       {/* TIMETABLE GRID */}
@@ -655,6 +602,7 @@ const GenerateAI = () => {
                                 ⚠️
                               </span>
                             )}
+                            <span style={styles.labBadge}>🔬 LAB</span>
                             <div
                               style={{
                                 fontWeight: 700,
@@ -663,6 +611,15 @@ const GenerateAI = () => {
                               }}
                             >
                               {cell.subject}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "0.72rem",
+                                color: "#64748b",
+                                marginTop: 2,
+                              }}
+                            >
+                              {cell.labSpan} consecutive slots
                             </div>
                           </td>
                         );
@@ -719,7 +676,9 @@ const GenerateAI = () => {
 
           {/* MODIFICATION PANEL */}
           <div style={{ ...styles.card, marginTop: 16 }}>
-            <h3 style={{ marginBottom: 8 }}>✏️ Request Changes</h3>
+            <h3 style={{ marginBottom: 8 }}>
+              ✏️ Request Changes (Natural Language)
+            </h3>
             <p
               style={{
                 color: "#64748b",
@@ -821,7 +780,7 @@ const styles = {
     minWidth: 90,
   },
   labCell: {
-    // border: "2px solid #6366f1",
+    border: "2px solid #6366f1",
     padding: "10px 12px",
     textAlign: "center",
     cursor: "grab",

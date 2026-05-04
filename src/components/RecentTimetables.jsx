@@ -49,7 +49,6 @@ const parseSlotStart = (label) => {
   return hours * 60 + m;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
 const RecentTimetables = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -357,10 +356,6 @@ const RecentTimetables = () => {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // HELPERS shared between modal & PDF
-  // ─────────────────────────────────────────────────────────────────────────
-
   /**
    * Merge the full slots list (which has break/lunch markers) with the
    * sorted class slot keys from the saved timetable.
@@ -401,9 +396,6 @@ const RecentTimetables = () => {
     return labLabels;
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TIMETABLE VIEWER MODAL
-  // ─────────────────────────────────────────────────────────────────────────
   const TimetableModal = ({ item, onClose }) => {
     const tt = item.timetable_json || {};
     const colorMap = makeColorMap(tt);
