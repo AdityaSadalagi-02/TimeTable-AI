@@ -331,7 +331,7 @@ const Settings = () => {
               href="https://aistudio.google.com"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ textDecoration: "null" }}
+              style={{ textDecoration: "none" }}
             >
               aistudio.google.com
             </a>
