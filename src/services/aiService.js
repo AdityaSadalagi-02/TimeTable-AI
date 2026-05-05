@@ -1,13 +1,46 @@
 import { supabase } from "../supabaseClient";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const API_KEY = "AIzaSyDDlKwj - X5ffyxNPGRfa3OaTFKuA6qg9HY";
-const genAI = new GoogleGenerativeAI(API_KEY);
-console.log("API Key:", API_KEY);
+const API_KEY = "AIzaSyDatV_50b7z6-M_gHFO0_5thrlJpelPg2I";
+let _activeApiKey = null;
 
-const model = genAI.getGenerativeModel({
+let genAI = new GoogleGenerativeAI(API_KEY);
+
+let model = genAI.getGenerativeModel({
   model: "gemini-3.1-flash-lite-preview",
 });
+
+(async () => {
+  try {
+    const { data } = await supabase
+      .from("api_keys")
+      .select("api_key")
+      .eq("is_active", true)
+      .maybeSingle();
+    if (data?.api_key) {
+      _activeApiKey = data.api_key;
+      console.log("✅ Using DB API KEY:");
+      genAI = new GoogleGenerativeAI(_activeApiKey);
+      model = genAI.getGenerativeModel({
+        model: "gemini-3.1-flash-lite-preview",
+      });
+    } else {
+      console.log("⚠️ Using fallback API KEY:");
+    }
+  } catch (e) {
+    console.warn("[aiService] Could not load API key:", e.message);
+    console.log("⚠️ Using fallback API KEY (error):");
+  }
+})();
+
+export const setActiveApiKey = (key) => {
+  _activeApiKey = key;
+  console.log("🔁 Switched API KEY:");
+  genAI = new GoogleGenerativeAI(_activeApiKey);
+  model = genAI.getGenerativeModel({
+    model: "gemini-3.1-flash-lite-preview",
+  });
+};
 
 const parseJSON = (text) => {
   try {

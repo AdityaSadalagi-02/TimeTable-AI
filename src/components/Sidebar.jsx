@@ -9,6 +9,7 @@ import {
   BookOpen,
   Settings2,
   X,
+  Settings,
 } from "lucide-react";
 
 const Sidebar = ({ activePage, setActivePage, onLogout, isOpen, onClose }) => {
@@ -23,6 +24,7 @@ const Sidebar = ({ activePage, setActivePage, onLogout, isOpen, onClose }) => {
     { id: "rooms", label: "Rooms", icon: School },
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "constraints", label: "Constraints", icon: Settings2 },
+    { id: "settings", label: "Settings", icon: Settings },
   ];
 
   const handleNav = (id) => {

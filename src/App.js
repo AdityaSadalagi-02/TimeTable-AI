@@ -11,6 +11,7 @@ import Login from "./components/Login";
 import { Toaster } from "react-hot-toast";
 import GenerateAI from "./components/GenerateAI";
 import { Menu } from "lucide-react";
+import Settings from "./components/Settings";
 
 const Placeholder = ({ title }) => (
   <div className="card">
@@ -74,6 +75,8 @@ function App() {
         return <ConstraintManager />;
       case "live":
         return <LiveStatus />;
+      case "settings":
+        return <Settings />;
       default:
         return <GenerateAI />;
     }
