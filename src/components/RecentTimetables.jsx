@@ -55,6 +55,7 @@ const RecentTimetables = () => {
   const [constraints, setConstraints] = useState(null);
   const [viewItem, setViewItem] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [courseDetails, setCourseDetails] = useState([]);
   const printRef = useRef();
 
   useEffect(() => {
@@ -180,6 +181,33 @@ const RecentTimetables = () => {
     } finally {
       setDeleting(null);
     }
+  };
+
+  const fetchCourseDetails = async (semester, department) => {
+    const { data, error } = await supabase
+      .from("subjects")
+      .select(
+        `
+        id,
+        subject_name,
+        subject_code,
+        weekly_hours,
+        teacher_subjects(
+          teachers(
+            name
+          )
+        )
+      `
+      )
+      .eq("semester", semester)
+      .eq("department", department);
+
+    if (error) {
+      console.error(error);
+      return [];
+    }
+
+    return data || [];
   };
 
   // ── FORMAT DATE ───────────────────────────────────────────────────────────
@@ -575,11 +603,109 @@ const RecentTimetables = () => {
                 ))}
               </tbody>
             </table>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: 1113.5,
+                borderColor: "gray",
+                marginTop: "10px",
+              }}
+              border={1}
+            >
+              <thead>
+                <tr>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Sl.No
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Course Title
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Code
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Credits
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Course Instructor
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {courseDetails.map((subject, index) => (
+                  <tr key={subject.id}>
+                    <td style={{ padding: "5px 10px", fontSize: "smaller" }}>
+                      {index + 1}
+                    </td>
+
+                    <td style={{ padding: "5px 10px", fontSize: "smaller" }}>
+                      {subject.subject_name}
+                    </td>
+
+                    <td style={{ padding: "5px 10px", fontSize: "smaller" }}>
+                      {subject.subject_code || "-"}
+                    </td>
+
+                    <td style={{ padding: "5px 10px", fontSize: "smaller" }}>
+                      {subject.weekly_hours}
+                    </td>
+
+                    <td style={{ padding: "5px 10px", fontSize: "smaller" }}>
+                      {getTeacherName(subject)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     );
   };
+
+  const getTeacherName = (subject) => {
+    const teacher = subject?.teacher_subjects?.[0]?.teachers?.name;
+
+    return teacher || "-";
+  };
+
   return (
     <div className="card">
       <div className="card-header">
@@ -648,7 +774,15 @@ const RecentTimetables = () => {
                       color: "#4f46e5",
                       borderColor: "#c7d2fe",
                     }}
-                    onClick={() => setViewItem(item)}
+                    onClick={async () => {
+                      const details = await fetchCourseDetails(
+                        item.semester,
+                        item.department
+                      );
+
+                      setCourseDetails(details);
+                      setViewItem(item);
+                    }}
                   >
                     👁 View
                   </button>

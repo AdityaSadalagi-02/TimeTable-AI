@@ -422,6 +422,16 @@ const GenerateAI = () => {
     }
   };
 
+  const getTeacherName = (subjectId) => {
+    const link = generationData?.data?.resources?.teacherLinks?.find(
+      (t) => t.subject_id === subjectId
+    );
+
+    if (!link) return "-";
+
+    return link.teachers?.name || "-";
+  };
+
   return (
     <div style={{ maxWidth: "1400px", margin: "30px auto", padding: "0 16px" }}>
       {/* CONTROL PANEL */}
@@ -745,6 +755,134 @@ const GenerateAI = () => {
                         </td>
                       );
                     })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {/* SUBJECT DETAILS TABLE */}
+
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                minWidth: 1113.5,
+                borderColor: "gray",
+                marginTop: "10px",
+              }}
+              border={1}
+            >
+              <thead>
+                <tr>
+                  <th
+                    style={{
+                      ...styles.detailsTh,
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Sl.No
+                  </th>
+                  <th
+                    style={{
+                      ...styles.detailsTh,
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Course Title
+                  </th>
+                  <th
+                    style={{
+                      ...styles.detailsTh,
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Code
+                  </th>
+                  <th
+                    style={{
+                      ...styles.detailsTh,
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Credits
+                  </th>
+                  <th
+                    style={{
+                      ...styles.detailsTh,
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      background: "rgb(237, 233, 254)",
+                      fontSize: "smaller",
+                    }}
+                  >
+                    Course Instructor
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {generationData?.data?.subjects?.map((subject, index) => (
+                  <tr key={subject.id}>
+                    <td
+                      style={{
+                        ...styles.detailsTd,
+                        padding: "5px 10px",
+                        fontSize: "smaller",
+                      }}
+                    >
+                      {index + 1}
+                    </td>
+
+                    <td
+                      style={{
+                        ...styles.detailsTd,
+                        padding: "5px 10px",
+                        fontSize: "smaller",
+                      }}
+                    >
+                      {subject.subject_name}
+                    </td>
+
+                    <td
+                      style={{
+                        ...styles.detailsTd,
+                        padding: "5px 10px",
+                        fontSize: "smaller",
+                      }}
+                    >
+                      {subject.subject_code || "-"}
+                    </td>
+
+                    <td
+                      style={{
+                        ...styles.detailsTd,
+                        padding: "5px 10px",
+                        fontSize: "smaller",
+                      }}
+                    >
+                      {subject.weekly_hours}
+                    </td>
+
+                    <td
+                      style={{
+                        ...styles.detailsTd,
+                        padding: "5px 10px",
+                        fontSize: "smaller",
+                      }}
+                    >
+                      {getTeacherName(subject.id)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
