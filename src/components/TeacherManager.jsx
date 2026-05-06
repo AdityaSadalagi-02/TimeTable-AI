@@ -15,6 +15,20 @@ const TeacherManager = () => {
     fetchAll();
   }, []);
 
+  const getInitials = (name) => {
+    if (!name) return "";
+
+    const ignore = ["dr", "prof", "mr", "mrs", "ms"];
+
+    return name
+      .replace(/\./g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter((word) => !ignore.includes(word.toLowerCase()))
+      .map((word) => word[0].toUpperCase())
+      .join("");
+  };
+
   const fetchAll = async () => {
     setLoading(true);
 
@@ -405,7 +419,8 @@ const TeacherManager = () => {
                         flexShrink: 0,
                       }}
                     >
-                      {teacher.name.charAt(0).toUpperCase()}
+                      {getInitials(teacher.name)}
+                      {/* {teacher.name.charAt(0).toUpperCase()} */}
                     </div>
                     <div>
                       <h4
@@ -424,7 +439,8 @@ const TeacherManager = () => {
                           color: "#94a3b8",
                         }}
                       >
-                        ID : <b>{teacher.id}</b> | Subjects : <b>{links.length}</b>
+                        ID : <b>{teacher.id}</b> | Subjects :{" "}
+                        <b>{links.length}</b>
                       </p>
                     </div>
                   </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { toast } from "react-hot-toast";
 import { setActiveApiKey } from "../services/aiService";
+import Button from "@mui/material/Button";
 import {
   Key,
   Plus,
@@ -185,8 +186,15 @@ const Settings = () => {
             </div>
           </div>
         </div>
-
-        <button
+        <Button
+          variant="contained"
+          onClick={handleAdd}
+          disabled={adding || !name.trim() || !apiKey.trim()}
+        >
+          <Plus size={16} />
+          {adding ? "Saving…" : "Save API Key"}
+        </Button>
+        {/* <button
           onClick={handleAdd}
           disabled={adding || !name.trim() || !apiKey.trim()}
           style={{
@@ -196,7 +204,7 @@ const Settings = () => {
         >
           <Plus size={16} />
           {adding ? "Saving…" : "Save API Key"}
-        </button>
+        </button> */}
       </div>
 
       {/* ── KEY LIST ── */}
