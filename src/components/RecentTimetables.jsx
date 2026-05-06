@@ -223,6 +223,29 @@ const RecentTimetables = () => {
   // ── DOWNLOAD as PDF ───────────────────────────────────────────────────────
   const handleDownload = async (item) => {
     const tt = item.timetable_json;
+
+    const getTeacherName = (subject) => {
+      return subject?.teacher_subjects?.[0]?.teachers?.name || "-";
+    };
+
+    const { data: courseDetails } = await supabase
+      .from("subjects")
+      .select(
+        `
+          id,
+          subject_name,
+          subject_code,
+          weekly_hours,
+          teacher_subjects(
+            teachers(
+              name
+            )
+          )
+        `
+      )
+      .eq("semester", item.semester)
+      .eq("department", item.department);
+
     if (!tt) return toast.error("No timetable data");
     const tid = toast.loading("Generating PDF…");
 
@@ -361,6 +384,85 @@ const RecentTimetables = () => {
         },
         theme: "grid",
         margin: { left: 10, right: 10 },
+      });
+
+      // ── COURSE DETAILS TABLE ─────────────────────────────
+
+      const finalY = doc.lastAutoTable.finalY || 40;
+
+      autoTable(doc, {
+        startY: finalY + 3,
+
+        tableWidth: 276.5,
+
+        head: [
+          ["Sl.No", "Course Title", "Code", "Credits", "Course Instructor"],
+        ],
+
+        body: (courseDetails || []).map((subject, index) => [
+          index + 1,
+          subject.subject_name,
+          subject.subject_code || "-",
+          subject.weekly_hours,
+          getTeacherName(subject),
+        ]),
+
+        styles: {
+          fontSize: 7.2,
+          cellPadding: 2.2,
+          textColor: [0, 0, 0],
+          lineColor: [160, 160, 160],
+          lineWidth: 0.2,
+          valign: "middle",
+          halign: "left",
+          overflow: "linebreak",
+          minCellHeight: 6,
+        },
+
+        headStyles: {
+          fillColor: [214, 210, 228],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          fontSize: 7.5,
+          halign: "left",
+          minCellHeight: 7,
+        },
+
+        bodyStyles: {
+          fillColor: [245, 245, 245],
+        },
+
+        columnStyles: {
+          0: {
+            cellWidth: 18,
+          },
+
+          1: {
+            cellWidth: 118,
+          },
+
+          2: {
+            cellWidth: 40,
+          },
+
+          3: {
+            cellWidth: 24,
+          },
+
+          4: {
+            cellWidth: 76,
+          },
+        },
+
+        margin: {
+          left: 10,
+          right: 10,
+          bottom: 5,
+        },
+
+        theme: "grid",
+
+        pageBreak: "avoid",
       });
 
       const pageCount = doc.internal.getNumberOfPages();
