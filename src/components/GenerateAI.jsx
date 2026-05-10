@@ -47,6 +47,7 @@ const steps = [
   { title: "Add Teachers", desc: "Assign teachers to subjects." },
   { title: "Define Constraints", desc: "Set scheduling rules." },
   { title: "Set Preferences", desc: "Preferred timings." },
+  { title: "Add Gemini API key", desc: "To run the LLM." },
   { title: "Review Inputs", desc: "Verify details." },
   {
     title: "Generate Timetable",

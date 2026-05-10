@@ -29,6 +29,8 @@ function App() {
     return sessionStorage.getItem("isLoggedIn") === "true";
   });
 
+  // const [isLoggedIn, setIsLoggedIn] = useState(true);
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
