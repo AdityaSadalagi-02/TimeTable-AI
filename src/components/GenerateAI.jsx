@@ -204,7 +204,36 @@ const GenerateAI = () => {
           toast.loading(msg, { id: tid });
         });
 
-      setGenerationData({ timetable, slots, data });
+      // ── Allocate theory room for preview ─────────────────
+
+      const rooms = data.resources.rooms || [];
+
+      const theoryRooms = rooms.filter(
+        (r) => r.room_type?.toLowerCase() === "theory"
+      );
+
+      let allocatedTheoryRoom = null;
+
+      for (const room of theoryRooms) {
+        const { data: existingBusy } = await supabase
+          .from("room_availability")
+          .select("*")
+          .eq("room_id", room.id)
+          .eq("is_busy", true);
+
+        if (!existingBusy || existingBusy.length === 0) {
+          allocatedTheoryRoom = room;
+          break;
+        }
+      }
+
+      setGenerationData((prev) => ({
+        ...prev,
+        timetable,
+        slots,
+        data,
+        theoryRoom: allocatedTheoryRoom?.room_name || "-",
+      }));
       rebuildMatrix(timetable, slots, data.subjects);
       setConflicts(remainingConflicts);
 
@@ -268,7 +297,10 @@ const GenerateAI = () => {
         data.busyMap.teacherBusy
       );
 
-      setGenerationData({ ...generationData, timetable: updated });
+      setGenerationData((prev) => ({
+        ...prev,
+        timetable: updated,
+      }));
       rebuildMatrix(updated, slots, data.subjects);
       setConflicts(newConflicts);
       setModInput("");
@@ -314,7 +346,7 @@ const GenerateAI = () => {
 
       // ── Dismiss immediately after critical save ───────────────────────────
       toast.success("Timetable saved!", { duration: 3000 });
-      setSaving(false);
+      // setSaving(false);
 
       // ── 2. Teacher availability — background, non-blocking ───────────────
       const subjectTeacherMap = {};
@@ -370,51 +402,77 @@ const GenerateAI = () => {
       }
 
       // ── 3. Room bookings — background, non-blocking ──────────────────────
+      // ── 3. Allocate ONE theory room ────────────────────────────
+
+      const allocatedTheoryRoomName = generationData.theoryRoom;
+
       const rooms = data.resources.rooms || [];
-      const theoryRooms = rooms.filter((r) => r.room_type === "Theory");
-      const labRooms = rooms.filter((r) => r.room_type === "Lab");
-      const labSubjects = data.subjects.filter((s) => s.is_lab);
-      const combinedLabLabel =
-        labSubjects.length > 0
-          ? labSubjects.map((l) => l.subject_name).join("/")
-          : null;
 
-      const roomBookingRows = [];
-      let theoryRoomIdx = 0;
-      let labRoomIdx = 0;
+      const allocatedTheoryRoom = rooms.find(
+        (r) => r.room_name === allocatedTheoryRoomName
+      );
 
-      for (const day in timetable) {
-        for (const slot in timetable[day]) {
-          const subject = timetable[day][slot];
-          if (!subject || subject === "-") continue;
-          const isLabSlot = combinedLabLabel && subject === combinedLabLabel;
-          let assignedRoom = null;
-          if (isLabSlot && labRooms.length > 0) {
-            assignedRoom = labRooms[labRoomIdx++ % labRooms.length];
-          } else if (!isLabSlot && theoryRooms.length > 0) {
-            assignedRoom = theoryRooms[theoryRoomIdx++ % theoryRooms.length];
-          }
-          if (assignedRoom) {
-            roomBookingRows.push({
-              room_id: assignedRoom.id,
+      if (allocatedTheoryRoom) {
+        // Save busy entries for all THEORY slots
+        const roomRows = [];
+
+        const labSubjects = data.subjects.filter((s) => s.is_lab);
+
+        const combinedLabLabel =
+          labSubjects.length > 0
+            ? labSubjects.map((l) => l.subject_name).join("/")
+            : null;
+
+        for (const day in timetable) {
+          for (const slot in timetable[day]) {
+            const subject = timetable[day][slot];
+
+            if (!subject || subject === "-" || subject === combinedLabLabel)
+              continue;
+
+            roomRows.push({
+              room_id: allocatedTheoryRoom.id,
               day_of_week: day,
               time_slot: slot,
-              subject_name: subject,
-              department: selectedDept,
-              semester: parseInt(selectedSem),
-              timetable_id: saved.id,
+              semester_id: parseInt(selectedSem),
+              is_busy: true,
             });
           }
         }
-      }
 
-      if (roomBookingRows.length > 0) {
-        const { error: roomErr } = await supabase
-          .from("room_bookings")
-          .upsert(roomBookingRows, {
+        if (roomRows.length > 0) {
+          const uniqueRoomRows = Array.from(
+            new Map(
+              roomRows.map((r) => [
+                `${r.room_id}_${r.day_of_week}_${r.time_slot}`,
+                r,
+              ])
+            ).values()
+          );
+
+          await supabase.from("room_availability").upsert(uniqueRoomRows, {
             onConflict: "room_id,day_of_week,time_slot",
           });
-        if (roomErr) console.warn("room_bookings warn:", roomErr.message);
+        }
+
+        // Save theory room into timetable row
+        await supabase
+          .from("saved_timetables")
+          .update({
+            theory_room: allocatedTheoryRoom.room_name,
+          })
+          .eq("id", saved.id);
+
+        setGenerationData((prev) => {
+          const updated = {
+            ...prev,
+            theoryRoom: allocatedTheoryRoom?.room_name || "-",
+          };
+
+          console.log("UPDATED GENERATION DATA:", updated);
+
+          return updated;
+        });
       }
     } catch (err) {
       toast.error(err.message || "Save failed");
@@ -615,8 +673,15 @@ const GenerateAI = () => {
               }}
             >
               <h3 style={{ margin: 0 }}>📅 Generated Timetable</h3>
-              <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
-                Drag cells to swap · {selectedDept} Sem {selectedSem}
+
+              <span
+                style={{
+                  fontSize: "0.9rem",
+                  fontWeight: "600",
+                  color: "#4338ca",
+                }}
+              >
+                Theory : {generationData?.theoryRoom || "-"}
               </span>
             </div>
 

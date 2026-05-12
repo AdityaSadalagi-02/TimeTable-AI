@@ -67,7 +67,9 @@ const RecentTimetables = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("saved_timetables")
-      .select("id, department, semester, created_at, timetable_json")
+      .select(
+        "id, department, semester, created_at, timetable_json,theory_room"
+      )
       .order("created_at", { ascending: false });
     if (error) {
       toast.error("Could not load timetables");
@@ -163,6 +165,21 @@ const RecentTimetables = () => {
 
       // ── 3. Delete room bookings ───────────────────────────────────────────
       await supabase.from("room_bookings").delete().eq("timetable_id", item.id);
+      // ── Delete room availability ─────────────────
+
+      const { data: roomData } = await supabase
+        .from("rooms")
+        .select("id")
+        .eq("room_name", item.theory_room)
+        .maybeSingle();
+
+      if (roomData?.id) {
+        await supabase
+          .from("room_availability")
+          .delete()
+          .eq("room_id", roomData.id)
+          .eq("semester_id", item.semester);
+      }
 
       // ── 4. Delete the timetable itself ───────────────────────────────────
       const { error } = await supabase
@@ -286,7 +303,7 @@ const RecentTimetables = () => {
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100);
-      doc.text(`Generated: ${formatDate(item.created_at)}`, 14, 22);
+      doc.text(`Theory : ${item.theory_room || "-"}`, 14, 22);
       doc.setTextColor(0);
 
       // Build head row
@@ -593,7 +610,7 @@ const RecentTimetables = () => {
           <div style={modal.header}>
             <div>
               <h2 style={{ margin: 0 }}>
-                📅 {item.department} — Semester {item.semester}
+                📅 {item.department} | Semester {item.semester}
               </h2>
               <p
                 style={{
@@ -602,7 +619,7 @@ const RecentTimetables = () => {
                   fontSize: "0.85rem",
                 }}
               >
-                Generated on {formatDate(item.created_at)}
+                Theory : {item.theory_room || "-"}
               </p>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
