@@ -225,7 +225,12 @@ const RecentTimetables = () => {
     const tt = item.timetable_json;
 
     const getTeacherName = (subject) => {
-      return subject?.teacher_subjects?.[0]?.teachers?.name || "-";
+      const teachers =
+        subject?.teacher_subjects
+          ?.map((t) => t.teachers?.name)
+          ?.filter(Boolean) || [];
+
+      return teachers.length > 0 ? teachers.join(", ") : "-";
     };
 
     const { data: courseDetails } = await supabase
@@ -803,9 +808,12 @@ const RecentTimetables = () => {
   };
 
   const getTeacherName = (subject) => {
-    const teacher = subject?.teacher_subjects?.[0]?.teachers?.name;
+    const teachers =
+      subject?.teacher_subjects
+        ?.map((t) => t.teachers?.name)
+        ?.filter(Boolean) || [];
 
-    return teacher || "-";
+    return teachers.length > 0 ? teachers.join(", ") : "-";
   };
 
   return (

@@ -424,13 +424,14 @@ const GenerateAI = () => {
   };
 
   const getTeacherName = (subjectId) => {
-    const link = generationData?.data?.resources?.teacherLinks?.find(
-      (t) => t.subject_id === subjectId
-    );
+    const links =
+      generationData?.data?.resources?.teacherLinks?.filter(
+        (t) => t.subject_id === subjectId
+      ) || [];
 
-    if (!link) return "-";
+    const teacherNames = links.map((l) => l.teachers?.name).filter(Boolean);
 
-    return link.teachers?.name || "-";
+    return teacherNames.length > 0 ? teacherNames.join(", ") : "-";
   };
 
   return (
