@@ -225,12 +225,61 @@ export const buildTimetableWithJS = (subjects, slots, constraints) => {
   const dayUsed = {};
   DAYS.forEach((d) => (dayUsed[d] = new Set()));
 
-  // ── STEP 1: Place each lab in exactly `labDuration` CONSECUTIVE slots ──
-  // Key fix: we work from classSlots (the true order), not a filtered list,
-  // so consecutive means adjacent in the actual day schedule.
-  // We prefer pre-lunch blocks; fall back to post-lunch if needed.
-  // Each lab gets its own day (round-robin across days).
+  // ── STEP 1: Place each lab in exactly `labDuration` TRULY CONSECUTIVE slots ──
+  // We scan the FULL slots array (including break/lunch markers).
+  // A window is valid only when `labDuration` class slots appear back-to-back
+  // with NO break or lunch between them — prevents 09:00-10:00 + 10:30-11:30.
+  // Priority: Morning (before BREAK) → After Break → After Lunch
+  // Each new lab day prefers a DIFFERENT time window (no repeated 8-10 Mon+Tue).
+
+  // Determine the boundary indices for BREAK and LUNCH in the full slots array
+  const breakIdx = slots.findIndex((s) => s.type === "break");
+  const lunchIdx2 = slots.findIndex((s) => s.type === "lunch");
+
+  // Build Sets for each zone
+  const morningSlotSet = new Set(
+    slots
+      .slice(0, breakIdx === -1 ? slots.length : breakIdx)
+      .filter((s) => s.type === "class")
+      .map((s) => s.label)
+  );
+  const afterBreakSlotSet = new Set(
+    slots
+      .slice(
+        breakIdx === -1 ? 0 : breakIdx + 1,
+        lunchIdx2 === -1 ? slots.length : lunchIdx2
+      )
+      .filter((s) => s.type === "class")
+      .map((s) => s.label)
+  );
+  // afterLunch = anything not in morning or afterBreak
+
+  // Build all truly consecutive windows from the full slot list
+  const allLabWindows = []; // each entry: [slotLabel, slotLabel, ...]
+  for (let i = 0; i < slots.length; i++) {
+    if (slots[i].type !== "class") continue;
+    const win = [];
+    let j = i;
+    while (win.length < labDuration && j < slots.length) {
+      if (slots[j].type === "class") {
+        win.push(slots[j].label);
+        j++;
+      } else break; // hit break or lunch — not consecutive
+    }
+    if (win.length === labDuration) allLabWindows.push(win);
+  }
+
+  // Classify each window by its starting slot's zone
+  const morningWindows = allLabWindows.filter((w) => morningSlotSet.has(w[0]));
+  const afterBreakWindows = allLabWindows.filter((w) =>
+    afterBreakSlotSet.has(w[0])
+  );
+  const afterLunchWindows = allLabWindows.filter(
+    (w) => !morningSlotSet.has(w[0]) && !afterBreakSlotSet.has(w[0])
+  );
+
   let labDayIdx = 0;
+  const usedLabWindowKeys = new Set(); // JSON.stringify(window) for used windows
 
   labs.forEach((lab) => {
     let placed = false;
@@ -238,28 +287,32 @@ export const buildTimetableWithJS = (subjects, slots, constraints) => {
     for (let di = 0; di < DAYS.length && !placed; di++) {
       const day = DAYS[(labDayIdx + di) % DAYS.length];
 
-      // Build candidate starting indices — pre-lunch positions first
-      const preLunchStarts = preLunchSlots
-        .map((sl) => classSlots.indexOf(sl))
-        .filter(
-          (idx) => idx !== -1 && idx + labDuration - 1 < classSlots.length
-        );
-      const postLunchStarts = postLunchSlots
-        .map((sl) => classSlots.indexOf(sl))
-        .filter(
-          (idx) => idx !== -1 && idx + labDuration - 1 < classSlots.length
-        );
-
-      const startCandidates = [
-        ...new Set([...preLunchStarts, ...postLunchStarts]),
+      // Priority: unused morning → unused afterBreak → unused afterLunch
+      //           → used morning → used afterBreak → used afterLunch
+      const ordered = [
+        ...morningWindows.filter(
+          (w) => !usedLabWindowKeys.has(JSON.stringify(w))
+        ),
+        ...afterBreakWindows.filter(
+          (w) => !usedLabWindowKeys.has(JSON.stringify(w))
+        ),
+        ...afterLunchWindows.filter(
+          (w) => !usedLabWindowKeys.has(JSON.stringify(w))
+        ),
+        ...morningWindows.filter((w) =>
+          usedLabWindowKeys.has(JSON.stringify(w))
+        ),
+        ...afterBreakWindows.filter((w) =>
+          usedLabWindowKeys.has(JSON.stringify(w))
+        ),
+        ...afterLunchWindows.filter((w) =>
+          usedLabWindowKeys.has(JSON.stringify(w))
+        ),
       ];
 
-      for (const startIdx of startCandidates) {
+      for (const block of ordered) {
         if (placed) break;
-        // Grab `labDuration` consecutive slots from classSlots starting at startIdx
-        const block = classSlots.slice(startIdx, startIdx + labDuration);
-        if (block.length < labDuration) continue;
-        // All must be free
+        // All slots in the block must be free on this day
         if (!block.every((sl) => timetable[day][sl] === "-")) continue;
 
         // Place lab label in every slot of the block
@@ -267,11 +320,11 @@ export const buildTimetableWithJS = (subjects, slots, constraints) => {
           timetable[day][sl] = labLabel;
         });
         dayUsed[day].add(labLabel);
-        // Decrement remaining for this lab
         remaining[lab.subject_name] = Math.max(
           0,
           (remaining[lab.subject_name] || 0) - 1
         );
+        usedLabWindowKeys.add(JSON.stringify(block)); // mark window as used
         placed = true;
         labDayIdx = (labDayIdx + di + 1) % DAYS.length;
       }
@@ -409,8 +462,13 @@ export const constructGeminiPrompt = (
   4. No same subject in the same time column for more than 2 consecutive days
   5. Lab ("${
     labLabel || "LAB"
-  }") must occupy exactly ${labDuration} consecutive slots on same day
+  }") must occupy exactly ${labDuration} CONSECUTIVE slots on the SAME day (no break or lunch between them)
   6. No subject exceeds its weekly_hours total
+  7. CRITICAL: DO NOT move or reschedule any lab ("${
+    labLabel || "LAB"
+  }") sessions.
+     Lab sessions are already correctly placed at DIFFERENT time windows on each day.
+     Keep every lab cell EXACTLY where it appears in the current timetable.
 
   ===== OUTPUT =====
   Return ONLY the complete corrected timetable as strict JSON. No markdown. No explanation.
@@ -685,6 +743,36 @@ export const generateTimetableFull = async (
   // 4. JS fix pass (clean up any over-limits / duplicates)
   timetable = fixTimetableWithJS(timetable, data.subjects);
 
+  // ── Capture lab positions from the JS result so Gemini cannot change them ──
+  const labSubjects = data.subjects.filter((s) => s.is_lab);
+  const labLabel = getLabLabel(labSubjects);
+  const jsLabSchedule = {}; // { day: [slot, ...] }
+  if (labLabel) {
+    for (const day in timetable) {
+      const labSlots = Object.keys(timetable[day]).filter(
+        (sl) => timetable[day][sl] === labLabel
+      );
+      if (labSlots.length > 0) jsLabSchedule[day] = labSlots;
+    }
+  }
+
+  // Helper: restore the JS lab schedule onto a timetable object
+  const restoreLabPositions = (tt) => {
+    if (!labLabel) return;
+    // 1. Clear any lab cells that Gemini placed
+    for (const day in tt) {
+      for (const sl in tt[day]) {
+        if (tt[day][sl] === labLabel) tt[day][sl] = "-";
+      }
+    }
+    // 2. Re-apply original JS lab positions
+    for (const day in jsLabSchedule) {
+      jsLabSchedule[day].forEach((sl) => {
+        if (tt[day]) tt[day][sl] = labLabel;
+      });
+    }
+  };
+
   // 5. AI review pass — give the JS result to AI to patch any remaining issues
   status("AI reviewing and patching timetable…");
   try {
@@ -708,6 +796,8 @@ export const generateTimetableFull = async (
     ];
     if (aiDays.length >= 6 && expectedDays.every((d) => aiPatched[d])) {
       timetable = fixTimetableWithJS(aiPatched, data.subjects);
+      // Restore lab positions that Gemini may have moved
+      restoreLabPositions(timetable);
     }
   } catch (err) {
     status("AI review skipped (using JS result)…");
@@ -756,7 +846,7 @@ export const generateTimetableFull = async (
       `⚠️ ${conflicts.length} conflict(s) remain after ${MAX_RETRIES} attempts.`
     );
   } else {
-    status("✅ Timetable generated and validated successfully!");
+    status("Timetable generated and validated successfully!");
   }
 
   return { timetable, slots, data, remainingConflicts: conflicts };
