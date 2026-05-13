@@ -89,8 +89,8 @@ const SubjectManager = () => {
 
   return (
     <div
-      className="card"
-      style={{ maxWidth: "1000px", margin: "20px auto", padding: "30px" }}
+      className="card room-manager-card"
+      style={{ maxWidth: "1000px", margin: "20px auto" }}
     >
       <div className="card-header" style={{ marginBottom: "30px" }}>
         <h2 style={{ color: "#0f172a" }}>Subject Management</h2>
@@ -110,13 +110,7 @@ const SubjectManager = () => {
         }}
       >
         {/* Row 1 — Name + Code */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-          }}
-        >
+        <div className="room-form-grid">
           <div className="form-group">
             <label style={{ color: "#475569", fontWeight: "600" }}>
               Subject Name
@@ -144,14 +138,7 @@ const SubjectManager = () => {
         </div>
 
         {/* Row 2 — Dept + Sem + Credits */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: "20px",
-            marginTop: "20px",
-          }}
-        >
+        <div className="subject-form-grid-3" style={{ marginTop: "20px" }}>
           <div className="form-group">
             <label style={{ color: "#475569", fontWeight: "600" }}>
               Department

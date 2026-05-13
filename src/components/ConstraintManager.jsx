@@ -197,14 +197,7 @@ const ConstraintManager = () => {
         <h4 style={{ color: "var(--primary-color)", marginBottom: "10px" }}>
           Active Rules :
         </h4>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "10px",
-            fontSize: "0.9rem",
-          }}
-        >
+        <div className="active-rules-grid">
           <p>
             🕒 College:{" "}
             <strong>

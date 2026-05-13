@@ -71,8 +71,8 @@ const RoomManager = () => {
 
   return (
     <div
-      className="card"
-      style={{ maxWidth: "1000px", margin: "20px auto", padding: "30px" }}
+      className="card room-manager-card"
+      style={{ maxWidth: "1000px", margin: "20px auto" }}
     >
       <div className="card-header" style={{ marginBottom: "30px" }}>
         <h2 style={{ color: "#0f172a" }}>Room Management</h2>
@@ -92,13 +92,7 @@ const RoomManager = () => {
           border: "1px solid #e2e8f0",
         }}
       >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-          }}
-        >
+        <div className="room-form-grid">
           <div className="form-group">
             <label style={{ color: "#475569", fontWeight: "600" }}>
               Room Name / Number
@@ -141,14 +135,7 @@ const RoomManager = () => {
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "20px",
-            marginTop: "20px",
-          }}
-        >
+        <div className="room-form-grid" style={{ marginTop: "20px" }}>
           <div className="form-group">
             <label style={{ color: "#475569", fontWeight: "600" }}>
               Student Capacity
