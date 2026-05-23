@@ -67,7 +67,9 @@ const RecentTimetables = () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("saved_timetables")
-      .select("id, department, semester, created_at, timetable_json")
+      .select(
+        "id, department, semester, created_at, timetable_json, theory_room, lab_rooms"
+      )
       .order("created_at", { ascending: false });
     if (error) {
       toast.error("Could not load timetables");
@@ -163,6 +165,39 @@ const RecentTimetables = () => {
 
       // ── 3. Delete room bookings ───────────────────────────────────────────
       await supabase.from("room_bookings").delete().eq("timetable_id", item.id);
+      // ── Delete room availability ─────────────────
+
+      const { data: roomData } = await supabase
+        .from("rooms")
+        .select("id")
+        .eq("room_name", item.theory_room)
+        .maybeSingle();
+
+      if (roomData?.id) {
+        await supabase
+          .from("room_availability")
+          .delete()
+          .eq("room_id", roomData.id)
+          .eq("semester_id", item.semester);
+      }
+
+      // ── Delete lab room availability ─────────────────────────────────────
+      const labRoomsMap = item.lab_rooms || {};
+      for (const [, labRoomName] of Object.entries(labRoomsMap)) {
+        if (!labRoomName || labRoomName === "-") continue;
+        const { data: labRoomData } = await supabase
+          .from("rooms")
+          .select("id")
+          .eq("room_name", labRoomName)
+          .maybeSingle();
+        if (labRoomData?.id) {
+          await supabase
+            .from("room_availability")
+            .delete()
+            .eq("room_id", labRoomData.id)
+            .eq("semester_id", item.semester);
+        }
+      }
 
       // ── 4. Delete the timetable itself ───────────────────────────────────
       const { error } = await supabase
@@ -225,7 +260,12 @@ const RecentTimetables = () => {
     const tt = item.timetable_json;
 
     const getTeacherName = (subject) => {
-      return subject?.teacher_subjects?.[0]?.teachers?.name || "-";
+      const teachers =
+        subject?.teacher_subjects
+          ?.map((t) => t.teachers?.name)
+          ?.filter(Boolean) || [];
+
+      return teachers.length > 0 ? teachers.join(", ") : "-";
     };
 
     const { data: courseDetails } = await supabase
@@ -281,7 +321,15 @@ const RecentTimetables = () => {
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100);
-      doc.text(`Generated: ${formatDate(item.created_at)}`, 14, 22);
+
+      // Build room info line: Theory + each lab room
+      const roomParts = [`Theory : ${item.theory_room || "-"}`];
+      const labRoomsMap = item.lab_rooms || {};
+      Object.entries(labRoomsMap).forEach(([labName, roomName]) => {
+        roomParts.push(`${labName} : ${roomName || "-"}`);
+      });
+      doc.text(roomParts.join("  |  "), 14, 22);
+
       doc.setTextColor(0);
 
       // Build head row
@@ -291,14 +339,46 @@ const RecentTimetables = () => {
       ];
       const head = [headRow];
 
-      // Build body rows
+      // Build body rows — merge consecutive lab cells with colSpan
       const body = DAYS.map((day) => {
-        const cells = columns.map((col) => {
-          if (col.type === "break") return "BREAK";
-          if (col.type === "lunch") return "LUNCH";
-          return tt[day]?.[col.label] || "—";
-        });
-        return [day, ...cells];
+        const row = [day];
+        let i = 0;
+        while (i < columns.length) {
+          const col = columns[i];
+          if (col.type === "break") {
+            row.push("BREAK");
+            i++;
+            continue;
+          }
+          if (col.type === "lunch") {
+            row.push("LUNCH");
+            i++;
+            continue;
+          }
+
+          const val = tt[day]?.[col.label] || "—";
+
+          // Merge consecutive class slots that share the same lab label
+          if (labLabels.has(val)) {
+            let span = 1;
+            let j = i + 1;
+            while (
+              j < columns.length &&
+              columns[j].type === "class" &&
+              (tt[day]?.[columns[j].label] || "—") === val
+            ) {
+              span++;
+              j++;
+            }
+
+            row.push(span > 1 ? { content: val, colSpan: span } : val);
+            i += span;
+          } else {
+            row.push(val);
+            i++;
+          }
+        }
+        return row;
       });
 
       const colorMap = {};
@@ -358,7 +438,9 @@ const RecentTimetables = () => {
         },
         didParseCell: (data) => {
           if (data.section === "body" && data.column.index > 0) {
-            const val = data.cell.raw;
+            // Support both plain string cells and colSpan object cells
+            const raw = data.cell.raw;
+            const val = raw && typeof raw === "object" ? raw.content : raw;
             if (val === "BREAK" || val === "LUNCH") {
               data.cell.styles.fillColor = [253, 230, 138];
               data.cell.styles.fontStyle = "bold";
@@ -588,7 +670,7 @@ const RecentTimetables = () => {
           <div style={modal.header}>
             <div>
               <h2 style={{ margin: 0 }}>
-                📅 {item.department} — Semester {item.semester}
+                📅 {item.department} | Semester {item.semester}
               </h2>
               <p
                 style={{
@@ -597,7 +679,16 @@ const RecentTimetables = () => {
                   fontSize: "0.85rem",
                 }}
               >
-                Generated on {formatDate(item.created_at)}
+                Theory : {item.theory_room || "-"}
+                {item.lab_rooms &&
+                  Object.entries(item.lab_rooms).map(([labName, roomName]) => (
+                    <span
+                      key={labName}
+                      style={{ marginLeft: 10, color: "#7c3aed" }}
+                    >
+                      | {labName} : {roomName || "-"}
+                    </span>
+                  ))}
               </p>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
@@ -803,9 +894,12 @@ const RecentTimetables = () => {
   };
 
   const getTeacherName = (subject) => {
-    const teacher = subject?.teacher_subjects?.[0]?.teachers?.name;
+    const teachers =
+      subject?.teacher_subjects
+        ?.map((t) => t.teachers?.name)
+        ?.filter(Boolean) || [];
 
-    return teacher || "-";
+    return teachers.length > 0 ? teachers.join(", ") : "-";
   };
 
   return (

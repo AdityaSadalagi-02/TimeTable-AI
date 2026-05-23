@@ -204,7 +204,321 @@ const GenerateAI = () => {
           toast.loading(msg, { id: tid });
         });
 
-      setGenerationData({ timetable, slots, data });
+      // ── Allocate theory room for preview ─────────────────
+
+      const rooms = data.resources.rooms || [];
+
+      const theoryRooms = rooms.filter(
+        (r) => r.room_type?.toLowerCase() === "theory"
+      );
+
+      let allocatedTheoryRoom = null;
+
+      for (const room of theoryRooms) {
+        const { data: existingBusy } = await supabase
+          .from("room_availability")
+          .select("*")
+          .eq("room_id", room.id)
+          .eq("is_busy", true);
+
+        if (!existingBusy || existingBusy.length === 0) {
+          allocatedTheoryRoom = room;
+          break;
+        }
+      }
+
+      // ── Allocate lab rooms ────────────────────────────────
+      // Each individual lab subject gets its own unique lab room.
+      // Lab rooms are shared infrastructure — always fetch ALL of them globally
+      // so a room not tagged to this department is still considered.
+      const { data: allLabRoomsData } = await supabase
+        .from("rooms")
+        .select("*")
+        .ilike("room_type", "lab");
+      const labRooms = allLabRoomsData || [];
+
+      // Fetch busy entries for lab rooms from OTHER semesters only.
+      // We exclude the current semester so that re-generating this semester's
+      // timetable does NOT block itself with its own previous entries.
+      const labRoomIds = labRooms.map((r) => r.id);
+      let existingLabBusy = [];
+      if (labRoomIds.length > 0) {
+        const { data: lbData } = await supabase
+          .from("room_availability")
+          .select("room_id,day_of_week,time_slot")
+          .in("room_id", labRoomIds)
+          .eq("is_busy", true)
+          .neq("semester_id", parseInt(selectedSem)); // ignore current sem's old entries
+        existingLabBusy = lbData || [];
+      }
+
+      // Build a Set for O(1) DB-busy lookup: "roomId_day_slot"
+      const dbBusySet = new Set(
+        existingLabBusy.map(
+          (r) => `${r.room_id}_${r.day_of_week}_${r.time_slot}`
+        )
+      );
+
+      // Tracks slots made busy within THIS generation run
+      const currentGenBusy = new Set();
+
+      // Detect lab subjects and their combined label
+      const labSubjects = data.subjects.filter((s) => s.is_lab);
+      const combinedLabLabel =
+        labSubjects.length > 0
+          ? labSubjects.map((l) => l.subject_name).join("/")
+          : null;
+
+      // Find all (day, slot) pairs where the combined lab label appears
+      const labOccurrences = []; // [{ day, slot }]
+      if (combinedLabLabel) {
+        for (const day in timetable) {
+          for (const slot in timetable[day]) {
+            if (timetable[day][slot] === combinedLabLabel) {
+              labOccurrences.push({ day, slot });
+            }
+          }
+        }
+      }
+
+      // Group occurrences by day
+      const labSlotsByDay = {};
+      labOccurrences.forEach(({ day, slot }) => {
+        if (!labSlotsByDay[day]) labSlotsByDay[day] = [];
+        labSlotsByDay[day].push(slot);
+      });
+
+      // ── Helpers ───────────────────────────────────────────────────────────
+      const isRoomFreeForBlock = (roomId, day, blockSlots) =>
+        blockSlots.every(
+          (slot) =>
+            !dbBusySet.has(`${roomId}_${day}_${slot}`) &&
+            !currentGenBusy.has(`${roomId}_${day}_${slot}`)
+        );
+
+      // ── Step 1: find how many free rooms exist at the CURRENT lab position
+      const labDays = Object.keys(labSlotsByDay);
+
+      const freeRoomsAtCurrentPos = labRooms.filter(
+        (room) =>
+          !labDays.some(
+            (day) => !isRoomFreeForBlock(room.id, day, labSlotsByDay[day])
+          )
+      );
+
+      // ── Step 2: if not enough free rooms at current position,
+      //    find the next consecutive slot window where EVERY lab day is
+      //    simultaneously free in the timetable AND has enough free rooms.
+      //    Search order: same days / next slots → same days / earlier slots → new day.
+      if (
+        combinedLabLabel &&
+        labSubjects.length > 0 &&
+        freeRoomsAtCurrentPos.length < labSubjects.length
+      ) {
+        const labDuration = parseInt(data.constraints.lab_duration) || 2;
+        const ALL_DAYS = [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+        ];
+
+        // The current window (same for every lab day)
+        const currentWindow =
+          labDays.length > 0 ? labSlotsByDay[labDays[0]] : [];
+
+        // Build truly consecutive windows: scan the FULL slots array (with breaks/lunch).
+        // A window is only valid when `labDuration` class slots appear back-to-back
+        // with NO break or lunch slot in between.
+        const allWindows = []; // [{ startIdx, window: [slotLabel, ...] }]
+        for (let i = 0; i < slots.length; i++) {
+          if (slots[i].type !== "class") continue;
+
+          const window = [];
+          let j = i;
+          while (window.length < labDuration && j < slots.length) {
+            if (slots[j].type === "class") {
+              window.push(slots[j].label);
+              j++;
+            } else {
+              break; // break or lunch — not consecutive
+            }
+          }
+
+          if (window.length === labDuration) {
+            allWindows.push({ startIdx: i, window });
+          }
+        }
+
+        // Order windows: those starting AFTER the current window come first (true "next"),
+        // then wrap around to earlier windows.
+        const currentStartIdx = slots.findIndex(
+          (s) => s.type === "class" && s.label === currentWindow[0]
+        );
+        const orderedWindows = [
+          ...allWindows.filter((w) => w.startIdx > currentStartIdx),
+          ...allWindows.filter((w) => w.startIdx <= currentStartIdx),
+        ].filter(
+          (w) => JSON.stringify(w.window) !== JSON.stringify(currentWindow)
+        );
+
+        // Helper: is a given window valid for ALL lab days?
+        //   - timetable slots free (or already the lab label) on every lab day
+        //   - enough lab rooms free on every lab day
+        const isWindowValidForAllDays = (window, days) => {
+          // Count rooms free on ALL of the given days at this window
+          const freeRooms = labRooms.filter((room) =>
+            days.every((day) => isRoomFreeForBlock(room.id, day, window))
+          );
+          if (freeRooms.length < labSubjects.length) return false;
+
+          return days.every((day) =>
+            window.every((slot) => {
+              const val = timetable[day]?.[slot];
+              return (
+                val === undefined || val === "-" || val === combinedLabLabel
+              );
+            })
+          );
+        };
+
+        // Move ALL lab days to a new window
+        const moveLabBlock = (newWindow, days) => {
+          days.forEach((day) => {
+            // Clear old slots
+            (labSlotsByDay[day] || []).forEach((oldSlot) => {
+              if (timetable[day]?.[oldSlot] === combinedLabLabel)
+                timetable[day][oldSlot] = "-";
+            });
+            // Set new slots
+            newWindow.forEach((newSlot) => {
+              if (timetable[day]) timetable[day][newSlot] = combinedLabLabel;
+            });
+            labSlotsByDay[day] = newWindow;
+          });
+        };
+
+        let moved = false;
+
+        // Pass A: same days, next available consecutive slots
+        for (const { window } of orderedWindows) {
+          if (isWindowValidForAllDays(window, labDays)) {
+            moveLabBlock(window, labDays);
+            moved = true;
+            break;
+          }
+        }
+
+        // Pass B: different day — find any day + window with enough free rooms
+        if (!moved) {
+          for (const newDay of ALL_DAYS.filter((d) => !labDays.includes(d))) {
+            for (const { window } of orderedWindows) {
+              const ttFree = window.every((slot) => {
+                const val = timetable[newDay]?.[slot];
+                return val === undefined || val === "-";
+              });
+              if (!ttFree) continue;
+
+              const freeRooms = labRooms.filter((room) =>
+                isRoomFreeForBlock(room.id, newDay, window)
+              );
+              if (freeRooms.length < labSubjects.length) continue;
+
+              // Replace the first lab day with this new day
+              const srcDay = labDays[0];
+              (labSlotsByDay[srcDay] || []).forEach((oldSlot) => {
+                if (timetable[srcDay]?.[oldSlot] === combinedLabLabel)
+                  timetable[srcDay][oldSlot] = "-";
+              });
+              window.forEach((newSlot) => {
+                if (timetable[newDay])
+                  timetable[newDay][newSlot] = combinedLabLabel;
+              });
+              labSlotsByDay[newDay] = window;
+              delete labSlotsByDay[srcDay];
+              moved = true;
+              break;
+            }
+            if (moved) break;
+          }
+        }
+      }
+
+      // ── Step 3: assign one unique room per lab subject at the (possibly moved) position
+      const labRoomMapping = {};
+      const assignedRoomIds = new Set();
+      const finalLabDays = Object.keys(labSlotsByDay);
+
+      if (finalLabDays.length > 0 && labSubjects.length > 0) {
+        for (const labSubject of labSubjects) {
+          let assigned = false;
+
+          // Pass 1 — perfectly free room at current/moved position
+          for (const room of labRooms) {
+            if (assignedRoomIds.has(room.id)) continue;
+            const free = finalLabDays.every((day) =>
+              isRoomFreeForBlock(room.id, day, labSlotsByDay[day])
+            );
+            if (free) {
+              labRoomMapping[labSubject.subject_name] = room.room_name;
+              assignedRoomIds.add(room.id);
+              finalLabDays.forEach((day) =>
+                labSlotsByDay[day].forEach((slot) =>
+                  currentGenBusy.add(`${room.id}_${day}_${slot}`)
+                )
+              );
+              assigned = true;
+              break;
+            }
+          }
+
+          // Pass 2 — least-conflicted room (last resort)
+          if (!assigned) {
+            let bestRoom = null;
+            let minConflicts = Infinity;
+            for (const room of labRooms) {
+              if (assignedRoomIds.has(room.id)) continue;
+              let conflicts = 0;
+              finalLabDays.forEach((day) =>
+                labSlotsByDay[day].forEach((slot) => {
+                  if (
+                    dbBusySet.has(`${room.id}_${day}_${slot}`) ||
+                    currentGenBusy.has(`${room.id}_${day}_${slot}`)
+                  )
+                    conflicts++;
+                })
+              );
+              if (conflicts < minConflicts) {
+                minConflicts = conflicts;
+                bestRoom = room;
+              }
+            }
+            if (bestRoom) {
+              labRoomMapping[labSubject.subject_name] = bestRoom.room_name;
+              assignedRoomIds.add(bestRoom.id);
+              finalLabDays.forEach((day) =>
+                labSlotsByDay[day].forEach((slot) =>
+                  currentGenBusy.add(`${bestRoom.id}_${day}_${slot}`)
+                )
+              );
+              assigned = true;
+            }
+          }
+
+          if (!assigned) labRoomMapping[labSubject.subject_name] = "-";
+        }
+      }
+
+      setGenerationData((prev) => ({
+        ...prev,
+        timetable,
+        slots,
+        data,
+        theoryRoom: allocatedTheoryRoom?.room_name || "-",
+        labRooms: labRoomMapping,
+      }));
       rebuildMatrix(timetable, slots, data.subjects);
       setConflicts(remainingConflicts);
 
@@ -268,7 +582,10 @@ const GenerateAI = () => {
         data.busyMap.teacherBusy
       );
 
-      setGenerationData({ ...generationData, timetable: updated });
+      setGenerationData((prev) => ({
+        ...prev,
+        timetable: updated,
+      }));
       rebuildMatrix(updated, slots, data.subjects);
       setConflicts(newConflicts);
       setModInput("");
@@ -314,7 +631,7 @@ const GenerateAI = () => {
 
       // ── Dismiss immediately after critical save ───────────────────────────
       toast.success("Timetable saved!", { duration: 3000 });
-      setSaving(false);
+      // setSaving(false);
 
       // ── 2. Teacher availability — background, non-blocking ───────────────
       const subjectTeacherMap = {};
@@ -369,52 +686,119 @@ const GenerateAI = () => {
           );
       }
 
-      // ── 3. Room bookings — background, non-blocking ──────────────────────
+      // ── 3. Room bookings — theory room (non-blocking) ───────────────────
+      const allocatedTheoryRoomName = generationData.theoryRoom;
       const rooms = data.resources.rooms || [];
-      const theoryRooms = rooms.filter((r) => r.room_type === "Theory");
-      const labRooms = rooms.filter((r) => r.room_type === "Lab");
-      const labSubjects = data.subjects.filter((s) => s.is_lab);
-      const combinedLabLabel =
-        labSubjects.length > 0
-          ? labSubjects.map((l) => l.subject_name).join("/")
-          : null;
+      const allocatedTheoryRoom = rooms.find(
+        (r) => r.room_name === allocatedTheoryRoomName
+      );
 
-      const roomBookingRows = [];
-      let theoryRoomIdx = 0;
-      let labRoomIdx = 0;
+      if (allocatedTheoryRoom) {
+        const roomRows = [];
+        const labSubjectsForSave = data.subjects.filter((s) => s.is_lab);
+        const combinedLabLabel =
+          labSubjectsForSave.length > 0
+            ? labSubjectsForSave.map((l) => l.subject_name).join("/")
+            : null;
 
-      for (const day in timetable) {
-        for (const slot in timetable[day]) {
-          const subject = timetable[day][slot];
-          if (!subject || subject === "-") continue;
-          const isLabSlot = combinedLabLabel && subject === combinedLabLabel;
-          let assignedRoom = null;
-          if (isLabSlot && labRooms.length > 0) {
-            assignedRoom = labRooms[labRoomIdx++ % labRooms.length];
-          } else if (!isLabSlot && theoryRooms.length > 0) {
-            assignedRoom = theoryRooms[theoryRoomIdx++ % theoryRooms.length];
-          }
-          if (assignedRoom) {
-            roomBookingRows.push({
-              room_id: assignedRoom.id,
+        for (const day in timetable) {
+          for (const slot in timetable[day]) {
+            const subject = timetable[day][slot];
+            if (!subject || subject === "-" || subject === combinedLabLabel)
+              continue;
+            roomRows.push({
+              room_id: allocatedTheoryRoom.id,
               day_of_week: day,
               time_slot: slot,
-              subject_name: subject,
-              department: selectedDept,
-              semester: parseInt(selectedSem),
-              timetable_id: saved.id,
+              semester_id: parseInt(selectedSem),
+              is_busy: true,
             });
+          }
+        }
+
+        if (roomRows.length > 0) {
+          const uniqueRoomRows = Array.from(
+            new Map(
+              roomRows.map((r) => [
+                `${r.room_id}_${r.day_of_week}_${r.time_slot}`,
+                r,
+              ])
+            ).values()
+          );
+          await supabase.from("room_availability").upsert(uniqueRoomRows, {
+            onConflict: "room_id,day_of_week,time_slot",
+          });
+        }
+
+        await supabase
+          .from("saved_timetables")
+          .update({ theory_room: allocatedTheoryRoom.room_name })
+          .eq("id", saved.id);
+
+        setGenerationData((prev) => ({
+          ...prev,
+          theoryRoom: allocatedTheoryRoom?.room_name || "-",
+        }));
+      }
+
+      // ── 4. Lab room bookings ──────────────────────────────────────────────
+      const labRoomMapping = generationData.labRooms || {};
+      const labRoomAvailRows = [];
+
+      // Find all (day, slot) pairs where the combined lab label appears
+      const labSubjectsForSave2 = data.subjects.filter((s) => s.is_lab);
+      const combinedLabLabelForSave =
+        labSubjectsForSave2.length > 0
+          ? labSubjectsForSave2.map((l) => l.subject_name).join("/")
+          : null;
+
+      const labSlotPairs = []; // [{ day, slot }]
+      if (combinedLabLabelForSave) {
+        for (const day in timetable) {
+          for (const slot in timetable[day]) {
+            if (timetable[day][slot] === combinedLabLabelForSave) {
+              labSlotPairs.push({ day, slot });
+            }
           }
         }
       }
 
-      if (roomBookingRows.length > 0) {
-        const { error: roomErr } = await supabase
-          .from("room_bookings")
-          .upsert(roomBookingRows, {
-            onConflict: "room_id,day_of_week,time_slot",
+      for (const [labSubjectName, roomName] of Object.entries(labRoomMapping)) {
+        if (!roomName || roomName === "-") continue;
+        const labRoom = rooms.find((r) => r.room_name === roomName);
+        if (!labRoom) continue;
+
+        labSlotPairs.forEach(({ day, slot }) => {
+          labRoomAvailRows.push({
+            room_id: labRoom.id,
+            day_of_week: day,
+            time_slot: slot,
+            semester_id: parseInt(selectedSem),
+            is_busy: true,
           });
-        if (roomErr) console.warn("room_bookings warn:", roomErr.message);
+        });
+      }
+
+      if (labRoomAvailRows.length > 0) {
+        const uniqueLabRows = Array.from(
+          new Map(
+            labRoomAvailRows.map((r) => [
+              `${r.room_id}_${r.day_of_week}_${r.time_slot}`,
+              r,
+            ])
+          ).values()
+        );
+        await supabase.from("room_availability").upsert(uniqueLabRows, {
+          onConflict: "room_id,day_of_week,time_slot",
+        });
+      }
+
+      // Persist lab_rooms JSON into saved_timetables row
+      if (Object.keys(labRoomMapping).length > 0) {
+        await supabase
+          .from("saved_timetables")
+          .update({ lab_rooms: labRoomMapping })
+          .eq("id", saved.id);
       }
     } catch (err) {
       toast.error(err.message || "Save failed");
@@ -424,17 +808,18 @@ const GenerateAI = () => {
   };
 
   const getTeacherName = (subjectId) => {
-    const link = generationData?.data?.resources?.teacherLinks?.find(
-      (t) => t.subject_id === subjectId
-    );
+    const links =
+      generationData?.data?.resources?.teacherLinks?.filter(
+        (t) => t.subject_id === subjectId
+      ) || [];
 
-    if (!link) return "-";
+    const teacherNames = links.map((l) => l.teachers?.name).filter(Boolean);
 
-    return link.teachers?.name || "-";
+    return teacherNames.length > 0 ? teacherNames.join(", ") : "-";
   };
 
   return (
-    <div style={{ maxWidth: "1400px", margin: "30px auto", padding: "0 16px" }}>
+    <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 4px" }}>
       {/* CONTROL PANEL */}
       <div style={styles.card}>
         <h2 style={{ textAlign: "center", marginBottom: 4 }}>
@@ -614,9 +999,40 @@ const GenerateAI = () => {
               }}
             >
               <h3 style={{ margin: 0 }}>📅 Generated Timetable</h3>
-              <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
-                Drag cells to swap · {selectedDept} Sem {selectedSem}
-              </span>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.9rem",
+                    fontWeight: "600",
+                    color: "#4338ca",
+                  }}
+                >
+                  Theory : {generationData?.theoryRoom || "-"}
+                </span>
+                {generationData?.labRooms &&
+                  Object.entries(generationData.labRooms).map(
+                    ([labName, roomName]) => (
+                      <span
+                        key={labName}
+                        style={{
+                          fontSize: "0.9rem",
+                          fontWeight: "600",
+                          color: "#7c3aed",
+                        }}
+                      >
+                        {labName} : {roomName || "-"}
+                      </span>
+                    )
+                  )}
+              </div>
             </div>
 
             <table
