@@ -819,7 +819,7 @@ const GenerateAI = () => {
   };
 
   return (
-    <div style={{ maxWidth: "1400px", margin: "30px auto", padding: "0 16px" }}>
+    <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 4px" }}>
       {/* CONTROL PANEL */}
       <div style={styles.card}>
         <h2 style={{ textAlign: "center", marginBottom: 4 }}>
