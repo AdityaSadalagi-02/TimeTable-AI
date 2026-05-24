@@ -7,7 +7,7 @@ let _activeApiKey = null;
 let genAI = new GoogleGenerativeAI(API_KEY);
 
 let model = genAI.getGenerativeModel({
-  model: "gemini-3.1-flash-lite",
+  model: "gemini-3.5-flash",
 });
 
 (async () => {
@@ -22,7 +22,7 @@ let model = genAI.getGenerativeModel({
       console.log("✅ Using DB API KEY:");
       genAI = new GoogleGenerativeAI(_activeApiKey);
       model = genAI.getGenerativeModel({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-3.5-flash",
       });
     } else {
       console.log("⚠️ Using fallback API KEY:");
@@ -38,7 +38,7 @@ export const setActiveApiKey = (key) => {
   console.log("🔁 Switched API KEY:");
   genAI = new GoogleGenerativeAI(_activeApiKey);
   model = genAI.getGenerativeModel({
-    model: "gemini-3.1-flash-lite",
+    model: "gemini-3.5-flash",
   });
 };
 
@@ -729,7 +729,7 @@ export const generateTimetableFull = async (
   };
 
   // 1. Fetch all data
-  status("Fetching subjects, constraints, teachers & rooms…");
+  status("Fetching subjects, constraints, teachers and rooms…");
   const data = await fetchGenerationData(semester, department);
 
   // 2. Build slot list

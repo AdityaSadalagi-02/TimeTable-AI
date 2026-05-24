@@ -800,7 +800,7 @@ const RecentTimetables = () => {
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
-                minWidth: 1113.5,
+                minWidth: 646.5,
                 borderColor: "gray",
                 marginTop: "10px",
               }}

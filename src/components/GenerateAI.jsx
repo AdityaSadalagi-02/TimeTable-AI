@@ -146,6 +146,61 @@ const GenerateAI = () => {
   const handleDragStart = (day, slotLabel) =>
     setDraggedCell({ day, slotLabel });
 
+  /**
+   * Check whether any lab room is double-booked with another semester
+   * after a drag-and-drop swap.
+   *
+   * Uses data stored in generationData at generation time — no extra DB calls.
+   *
+   * labRoomBusyEntries: [{ room_id, day_of_week, time_slot }] from other sems
+   * labRoomIdMap:       { "Lab 1": <uuid>, "Lab 2": <uuid>, ... }
+   */
+  const checkLabRoomConflicts = (timetable, genData) => {
+    const roomConflicts = [];
+    const {
+      labRooms: labRoomMapping,
+      labRoomBusyEntries,
+      labRoomIdMap,
+      data,
+    } = genData || {};
+
+    if (!labRoomMapping || !labRoomBusyEntries || !labRoomIdMap || !data)
+      return roomConflicts;
+
+    const labSubjects = data.subjects.filter((s) => s.is_lab);
+    if (labSubjects.length === 0) return roomConflicts;
+    const combinedLabLabel = labSubjects.map((l) => l.subject_name).join("/");
+
+    // Build O(1) lookup set: "roomId_day_slot"
+    const busySet = new Set(
+      labRoomBusyEntries.map(
+        (r) => `${r.room_id}_${r.day_of_week}_${r.time_slot}`
+      )
+    );
+
+    // Walk the timetable — for every cell that holds the combined lab label,
+    // check each assigned lab room against the busy set.
+    for (const day in timetable) {
+      for (const slot in timetable[day]) {
+        if (timetable[day][slot] !== combinedLabLabel) continue;
+
+        for (const [labName, roomName] of Object.entries(labRoomMapping)) {
+          if (!roomName || roomName === "-") continue;
+          const roomId = labRoomIdMap[roomName];
+          if (!roomId) continue;
+
+          if (busySet.has(`${roomId}_${day}_${slot}`)) {
+            roomConflicts.push(
+              `ROOM_CONFLICT: "${roomName}" is already booked on ${day} at ${slot} by another semester`
+            );
+          }
+        }
+      }
+    }
+
+    return roomConflicts;
+  };
+
   const handleDrop = (targetDay, targetSlotLabel) => {
     if (!draggedCell) return;
     if (
@@ -160,12 +215,18 @@ const GenerateAI = () => {
       newTimetable[targetDay][targetSlotLabel];
     newTimetable[targetDay][targetSlotLabel] = temp;
 
-    const newConflicts = validateTimetable(
+    // Standard timetable validation (teacher conflicts, duplicates, over-limit)
+    const timetableConflicts = validateTimetable(
       newTimetable,
       generationData.data.subjects,
       generationData.data.resources.teacherLinks,
       generationData.data.busyMap.teacherBusy
     );
+
+    // Room conflict check: was this lab moved to a slot already booked by another semester?
+    const roomConflicts = checkLabRoomConflicts(newTimetable, generationData);
+
+    const allConflicts = [...timetableConflicts, ...roomConflicts];
 
     setGenerationData({ ...generationData, timetable: newTimetable });
     rebuildMatrix(
@@ -173,11 +234,11 @@ const GenerateAI = () => {
       generationData.slots,
       generationData.data.subjects
     );
-    setConflicts(newConflicts);
+    setConflicts(allConflicts);
     setDraggedCell(null);
 
-    if (newConflicts.length > 0) {
-      toast(`Swapped! But ${newConflicts.length} conflict(s) detected.`, {
+    if (allConflicts.length > 0) {
+      toast(`Swapped! But ${allConflicts.length} conflict(s) detected.`, {
         icon: "⚠️",
       });
     } else {
@@ -205,15 +266,12 @@ const GenerateAI = () => {
         });
 
       // ── Allocate theory room for preview ─────────────────
-
       const rooms = data.resources.rooms || [];
-
       const theoryRooms = rooms.filter(
         (r) => r.room_type?.toLowerCase() === "theory"
       );
 
       let allocatedTheoryRoom = null;
-
       for (const room of theoryRooms) {
         const { data: existingBusy } = await supabase
           .from("room_availability")
@@ -368,7 +426,6 @@ const GenerateAI = () => {
         //   - timetable slots free (or already the lab label) on every lab day
         //   - enough lab rooms free on every lab day
         const isWindowValidForAllDays = (window, days) => {
-          // Count rooms free on ALL of the given days at this window
           const freeRooms = labRooms.filter((room) =>
             days.every((day) => isRoomFreeForBlock(room.id, day, window))
           );
@@ -518,6 +575,11 @@ const GenerateAI = () => {
         data,
         theoryRoom: allocatedTheoryRoom?.room_name || "-",
         labRooms: labRoomMapping,
+        // Store for drag-and-drop room conflict detection (no extra DB calls needed)
+        labRoomBusyEntries: existingLabBusy, // [{ room_id, day_of_week, time_slot }] from other sems
+        labRoomIdMap: Object.fromEntries(
+          labRooms.map((r) => [r.room_name, r.id])
+        ), // { "Lab 1": id, ... }
       }));
       rebuildMatrix(timetable, slots, data.subjects);
       setConflicts(remainingConflicts);
@@ -525,11 +587,7 @@ const GenerateAI = () => {
       if (remainingConflicts.length > 0) {
         toast(
           `Generated with ${remainingConflicts.length} unresolved conflict(s)`,
-          {
-            id: tid,
-            icon: "⚠️",
-            duration: 5000,
-          }
+          { id: tid, icon: "⚠️", duration: 5000 }
         );
       } else {
         toast.success("Timetable generated successfully!", { id: tid });
@@ -629,9 +687,7 @@ const GenerateAI = () => {
 
       if (saveErr) throw new Error("Save failed: " + saveErr.message);
 
-      // ── Dismiss immediately after critical save ───────────────────────────
       toast.success("Timetable saved!", { duration: 3000 });
-      // setSaving(false);
 
       // ── 2. Teacher availability — background, non-blocking ───────────────
       const subjectTeacherMap = {};
@@ -743,58 +799,88 @@ const GenerateAI = () => {
 
       // ── 4. Lab room bookings ──────────────────────────────────────────────
       const labRoomMapping = generationData.labRooms || {};
-      const labRoomAvailRows = [];
 
-      // Find all (day, slot) pairs where the combined lab label appears
-      const labSubjectsForSave2 = data.subjects.filter((s) => s.is_lab);
-      const combinedLabLabelForSave =
-        labSubjectsForSave2.length > 0
-          ? labSubjectsForSave2.map((l) => l.subject_name).join("/")
-          : null;
+      if (Object.keys(labRoomMapping).length > 0) {
+        // IMPORTANT: always fetch lab rooms GLOBALLY (not department-filtered)
+        // because lab rooms are shared infrastructure — the same room may be
+        // registered under a different department or no department at all.
+        // Using department-filtered `rooms` here was the bug that caused rooms
+        // to appear free when they were already booked by another semester.
+        const { data: allLabRoomsForSave } = await supabase
+          .from("rooms")
+          .select("*")
+          .ilike("room_type", "lab");
+        const allLabRoomsGlobal = allLabRoomsForSave || [];
 
-      const labSlotPairs = []; // [{ day, slot }]
-      if (combinedLabLabelForSave) {
-        for (const day in timetable) {
-          for (const slot in timetable[day]) {
-            if (timetable[day][slot] === combinedLabLabelForSave) {
-              labSlotPairs.push({ day, slot });
+        const labSubjectsForSave2 = data.subjects.filter((s) => s.is_lab);
+        const combinedLabLabelForSave =
+          labSubjectsForSave2.length > 0
+            ? labSubjectsForSave2.map((l) => l.subject_name).join("/")
+            : null;
+
+        const labSlotPairs = []; // [{ day, slot }]
+        if (combinedLabLabelForSave) {
+          for (const day in timetable) {
+            for (const slot in timetable[day]) {
+              if (timetable[day][slot] === combinedLabLabelForSave) {
+                labSlotPairs.push({ day, slot });
+              }
             }
           }
         }
-      }
 
-      for (const [labSubjectName, roomName] of Object.entries(labRoomMapping)) {
-        if (!roomName || roomName === "-") continue;
-        const labRoom = rooms.find((r) => r.room_name === roomName);
-        if (!labRoom) continue;
+        const labRoomAvailRows = [];
 
-        labSlotPairs.forEach(({ day, slot }) => {
-          labRoomAvailRows.push({
-            room_id: labRoom.id,
-            day_of_week: day,
-            time_slot: slot,
-            semester_id: parseInt(selectedSem),
-            is_busy: true,
+        for (const [labSubjectName, roomName] of Object.entries(
+          labRoomMapping
+        )) {
+          if (!roomName || roomName === "-") continue;
+          // Use the globally fetched lab rooms list — NOT the department-filtered one
+          const labRoom = allLabRoomsGlobal.find(
+            (r) => r.room_name === roomName
+          );
+          if (!labRoom) {
+            console.warn(
+              `[Save] Lab room "${roomName}" not found in global room list`
+            );
+            continue;
+          }
+
+          labSlotPairs.forEach(({ day, slot }) => {
+            labRoomAvailRows.push({
+              room_id: labRoom.id,
+              day_of_week: day,
+              time_slot: slot,
+              semester_id: parseInt(selectedSem),
+              is_busy: true,
+            });
           });
-        });
-      }
+        }
 
-      if (labRoomAvailRows.length > 0) {
-        const uniqueLabRows = Array.from(
-          new Map(
-            labRoomAvailRows.map((r) => [
-              `${r.room_id}_${r.day_of_week}_${r.time_slot}`,
-              r,
-            ])
-          ).values()
-        );
-        await supabase.from("room_availability").upsert(uniqueLabRows, {
-          onConflict: "room_id,day_of_week,time_slot",
-        });
-      }
+        if (labRoomAvailRows.length > 0) {
+          const uniqueLabRows = Array.from(
+            new Map(
+              labRoomAvailRows.map((r) => [
+                `${r.room_id}_${r.day_of_week}_${r.time_slot}`,
+                r,
+              ])
+            ).values()
+          );
+          const { error: labAvailErr } = await supabase
+            .from("room_availability")
+            .upsert(uniqueLabRows, {
+              onConflict: "room_id,day_of_week,time_slot",
+            });
+          if (labAvailErr) {
+            console.warn("lab room_availability warn:", labAvailErr.message);
+          } else {
+            console.log(
+              `✅ ${uniqueLabRows.length} lab room slots marked busy`
+            );
+          }
+        }
 
-      // Persist lab_rooms JSON into saved_timetables row
-      if (Object.keys(labRoomMapping).length > 0) {
+        // Persist lab_rooms JSON into saved_timetables row
         await supabase
           .from("saved_timetables")
           .update({ lab_rooms: labRoomMapping })
@@ -814,7 +900,6 @@ const GenerateAI = () => {
       ) || [];
 
     const teacherNames = links.map((l) => l.teachers?.name).filter(Boolean);
-
     return teacherNames.length > 0 ? teacherNames.join(", ") : "-";
   };
 
@@ -869,19 +954,6 @@ const GenerateAI = () => {
         >
           {loading ? "Generating…" : "🚀 Generate Timetable"}
         </Button>
-
-        {/* {loading && statusMsg && (
-          <p
-            style={{
-              marginTop: 10,
-              color: "#6366f1",
-              textAlign: "center",
-              fontSize: "0.88rem",
-            }}
-          >
-            {statusMsg}
-          </p>
-        )} */}
       </div>
 
       {/* CONFLICT PANEL */}
@@ -1046,7 +1118,6 @@ const GenerateAI = () => {
                 <tr>
                   <th style={styles.th}>Day</th>
                   {matrix["Monday"].map((slot, idx) => {
-                    // labSkip slots: render their own <th> normally (no merging in header)
                     if (slot.type !== "class") {
                       return (
                         <th
@@ -1057,7 +1128,6 @@ const GenerateAI = () => {
                         </th>
                       );
                     }
-                    // Every class slot — lab or theory — gets its own header with its time label
                     return (
                       <th key={idx} style={styles.th}>
                         {slot.label}
@@ -1071,7 +1141,6 @@ const GenerateAI = () => {
                   <tr key={day}>
                     <td style={styles.dayCell}>{day}</td>
                     {matrix[day].map((cell, idx) => {
-                      // Skip cells that are part of a merged lab block
                       if (cell.labSkip) return null;
 
                       if (cell.type === "lunch" || cell.type === "break") {
@@ -1176,13 +1245,13 @@ const GenerateAI = () => {
                 ))}
               </tbody>
             </table>
-            {/* SUBJECT DETAILS TABLE */}
 
+            {/* SUBJECT DETAILS TABLE */}
             <table
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
-                minWidth: 1113.5,
+                minWidth: 646.5,
                 borderColor: "gray",
                 marginTop: "10px",
               }}
@@ -1190,64 +1259,28 @@ const GenerateAI = () => {
             >
               <thead>
                 <tr>
-                  <th
-                    style={{
-                      ...styles.detailsTh,
-                      textAlign: "left",
-                      padding: "10px 10px",
-                      background: "rgb(237, 233, 254)",
-                      fontSize: "smaller",
-                    }}
-                  >
-                    Sl.No
-                  </th>
-                  <th
-                    style={{
-                      ...styles.detailsTh,
-                      textAlign: "left",
-                      padding: "10px 10px",
-                      background: "rgb(237, 233, 254)",
-                      fontSize: "smaller",
-                    }}
-                  >
-                    Course Title
-                  </th>
-                  <th
-                    style={{
-                      ...styles.detailsTh,
-                      textAlign: "left",
-                      padding: "10px 10px",
-                      background: "rgb(237, 233, 254)",
-                      fontSize: "smaller",
-                    }}
-                  >
-                    Code
-                  </th>
-                  <th
-                    style={{
-                      ...styles.detailsTh,
-                      textAlign: "left",
-                      padding: "10px 10px",
-                      background: "rgb(237, 233, 254)",
-                      fontSize: "smaller",
-                    }}
-                  >
-                    Credits
-                  </th>
-                  <th
-                    style={{
-                      ...styles.detailsTh,
-                      textAlign: "left",
-                      padding: "10px 10px",
-                      background: "rgb(237, 233, 254)",
-                      fontSize: "smaller",
-                    }}
-                  >
-                    Course Instructor
-                  </th>
+                  {[
+                    "Sl.No",
+                    "Course Title",
+                    "Code",
+                    "Credits",
+                    "Course Instructor",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        ...styles.detailsTh,
+                        textAlign: "left",
+                        padding: "10px 10px",
+                        background: "rgb(237, 233, 254)",
+                        fontSize: "smaller",
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
-
               <tbody>
                 {generationData?.data?.subjects?.map((subject, index) => (
                   <tr key={subject.id}>
@@ -1260,7 +1293,6 @@ const GenerateAI = () => {
                     >
                       {index + 1}
                     </td>
-
                     <td
                       style={{
                         ...styles.detailsTd,
@@ -1270,7 +1302,6 @@ const GenerateAI = () => {
                     >
                       {subject.subject_name}
                     </td>
-
                     <td
                       style={{
                         ...styles.detailsTd,
@@ -1280,7 +1311,6 @@ const GenerateAI = () => {
                     >
                       {subject.subject_code || "-"}
                     </td>
-
                     <td
                       style={{
                         ...styles.detailsTd,
@@ -1290,7 +1320,6 @@ const GenerateAI = () => {
                     >
                       {subject.weekly_hours}
                     </td>
-
                     <td
                       style={{
                         ...styles.detailsTd,
@@ -1384,6 +1413,13 @@ const styles = {
     whiteSpace: "nowrap",
     textAlign: "center",
   },
+  detailsTh: {
+    border: "1px solid #e2e8f0",
+    fontWeight: 700,
+  },
+  detailsTd: {
+    border: "1px solid #e2e8f0",
+  },
   dayCell: {
     border: "1px solid #e2e8f0",
     padding: "10px 12px",
@@ -1410,7 +1446,6 @@ const styles = {
     minWidth: 90,
   },
   labCell: {
-    // border: "2px solid #6366f1",
     padding: "10px 12px",
     textAlign: "center",
     cursor: "grab",
