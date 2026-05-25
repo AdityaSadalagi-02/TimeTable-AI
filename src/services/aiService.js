@@ -118,7 +118,12 @@ export const createSlotsWithBreaks = (c) => {
     const h = Math.floor(total / 60);
     const m = total % 60;
     const date = new Date(2026, 0, 1, h, m);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    // Force 12-hour AM/PM format regardless of system locale
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
   };
 
   let curr = toMins(c.start_hour, c.start_min);
@@ -729,7 +734,7 @@ export const generateTimetableFull = async (
   };
 
   // 1. Fetch all data
-  status("Fetching subjects, constraints, teachers and rooms…");
+  status("Fetching subjects, constraints, teachers & rooms…");
   const data = await fetchGenerationData(semester, department);
 
   // 2. Build slot list

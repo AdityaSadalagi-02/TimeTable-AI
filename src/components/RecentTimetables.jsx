@@ -39,14 +39,57 @@ const makeColorMap = (timetable) => {
   return map;
 };
 
-// Parse "08:00 AM" → minutes from midnight (for sorting)
+// Parse slot start time → minutes from midnight (for chronological sorting)
+// Handles BOTH formats:
+//   12-hour: "08:00 AM-09:00 AM"  →  correct sort
+//   24-hour: "08:00-09:00"        →  correct sort (old saved timetables)
 const parseSlotStart = (label) => {
+  if (!label) return 0;
   const start = label.split("-")[0].trim();
-  const [time, period] = start.split(" ");
-  const [h, m] = time.split(":").map(Number);
-  let hours = h % 12;
-  if (period === "PM") hours += 12;
-  return hours * 60 + m;
+  const parts = start.split(" ");
+  const timePart = parts[0];
+  const period = parts[1]; // "AM", "PM", or undefined (24h format)
+  const [hStr, mStr] = timePart.split(":");
+  const h = parseInt(hStr, 10) || 0;
+  const m = parseInt(mStr, 10) || 0;
+
+  if (period === "AM") {
+    // 12h AM: 12:xx AM → 0:xx
+    return (h % 12) * 60 + m;
+  } else if (period === "PM") {
+    // 12h PM: 12:xx PM → 12:xx, others +12
+    return ((h % 12) + 12) * 60 + m;
+  } else {
+    // 24h format — use hour value directly
+    return h * 60 + m;
+  }
+};
+
+/**
+ * Convert any slot label to 12-hour AM/PM for display.
+ * "08:00-09:00"        → "08:00 AM-09:00 AM"   (old 24h saved timetables)
+ * "08:00 AM-09:00 AM"  → "08:00 AM-09:00 AM"   (new format — unchanged)
+ */
+const formatSlotLabel = (label) => {
+  if (!label || label === "BREAK" || label === "LUNCH") return label;
+  // Already has AM/PM — return as-is
+  if (label.includes("AM") || label.includes("PM")) return label;
+
+  // Convert 24h "HH:MM-HH:MM" → "HH:MM AM/PM-HH:MM AM/PM"
+  const parts = label.split("-");
+  if (parts.length < 2) return label;
+
+  const fmt = (timeStr) => {
+    const [h, m] = timeStr.trim().split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const display = h % 12 || 12;
+    return `${String(display).padStart(2, "0")}:${String(m).padStart(
+      2,
+      "0"
+    )} ${period}`;
+  };
+
+  return `${fmt(parts[0])}-${fmt(parts[1])}`;
 };
 
 const RecentTimetables = () => {
@@ -735,7 +778,7 @@ const RecentTimetables = () => {
                     }
                     return (
                       <th key={idx} style={tStyle.th}>
-                        {col.label}
+                        {formatSlotLabel(col.label)}
                       </th>
                     );
                   })}
